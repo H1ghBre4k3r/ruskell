@@ -1,0 +1,700 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  update-version:
+    name: Update Version and Amend Tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+      is_prerelease: ${{ steps.extract.outputs.is_prerelease }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: extract
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          # Check if this is a pre-release (ends with -RC)
+          if [[ "$VERSION" == *-RC* ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+          echo "Extracted version: $VERSION"
+          echo "Is pre-release: $([[ "$VERSION" == *-RC* ]] && echo "true" || echo "false")"
+
+      - name: Update version in Cargo.toml files
+        run: |
+          VERSION=${{ steps.extract.outputs.version }}
+
+          # Update root Cargo.toml
+          sed -i 's/^version = ".*"/version = "'$VERSION'"/' Cargo.toml
+
+          # Update workspace member
+          sed -i 's/^version = ".*"/version = "'$VERSION'"/' crates/why_lib/Cargo.toml
+
+          echo "Updated versions to $VERSION"
+          echo "Root Cargo.toml version:"
+          grep '^version = ' Cargo.toml
+          echo "why_lib Cargo.toml version:"
+          grep '^version = ' crates/why_lib/Cargo.toml
+
+      - name: Update CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=${{ steps.extract.outputs.version }}
+          RELEASE_DATE=$(date +%Y-%m-%d)
+          IS_PRERELEASE=${{ steps.extract.outputs.is_prerelease }}
+
+          echo "=== Updating CHANGELOG.md for version $VERSION ==="
+
+          # Validate CHANGELOG.md exists and has expected structure
+          if [ ! -f "CHANGELOG.md" ]; then
+            echo "❌ CHANGELOG.md not found!"
+            exit 1
+          fi
+
+          if ! grep -q "## \[Unreleased\]" CHANGELOG.md; then
+            echo "❌ CHANGELOG.md missing [Unreleased] section!"
+            exit 1
+          fi
+
+          # Check if this version already exists in changelog
+          if grep -q "## \[$VERSION\]" CHANGELOG.md; then
+            echo "⚠️  Version $VERSION already exists in CHANGELOG.md, skipping update"
+          else
+            echo "📝 Generating changelog entry for version $VERSION..."
+
+            # Get the previous release tag
+            PREV_TAG=$(git tag --sort=-version:refname | grep -v "v$VERSION" | head -n1)
+
+            if [ -n "$PREV_TAG" ]; then
+              echo "📊 Generating changelog from $PREV_TAG to v$VERSION"
+              COMMIT_RANGE="$PREV_TAG..v$VERSION"
+            else
+              echo "📊 No previous tag found, generating changelog from beginning"
+              COMMIT_RANGE="v$VERSION"
+            fi
+
+            # Generate PR-based changelog for CHANGELOG.md - only include PRs, no individual commits
+            COMMITS=""
+
+            # Get the time range for this release
+            if [ -n "$PREV_TAG" ]; then
+              # Get the timestamp of the previous tag
+              CHANGELOG_PREV_TAG_DATE=$(git log -1 --format=%ct $PREV_TAG 2>/dev/null || echo "0")
+              echo "  Previous tag ($PREV_TAG) date for changelog: $(date -d @$CHANGELOG_PREV_TAG_DATE 2>/dev/null || date -r $CHANGELOG_PREV_TAG_DATE 2>/dev/null || echo 'unknown')"
+            else
+              # If no previous tag, use a very old date (1 year ago)
+              CHANGELOG_PREV_TAG_DATE=$(date -d "1 year ago" +%s 2>/dev/null || date -v-1y +%s 2>/dev/null || echo "0")
+              echo "  No previous tag, using 1 year ago as start date for changelog"
+            fi
+
+            # Get the timestamp of the current version tag (use tag creation time if it exists, otherwise now)
+            CHANGELOG_CURRENT_DATE=$(git log -1 --format=%ct v$VERSION 2>/dev/null || date +%s)
+            echo "  Current release (v$VERSION) date for changelog: $(date -d @$CHANGELOG_CURRENT_DATE 2>/dev/null || date -r $CHANGELOG_CURRENT_DATE 2>/dev/null || echo 'now')"
+
+            # Convert to ISO format for debugging
+            CHANGELOG_START_ISO=$(date -d @$CHANGELOG_PREV_TAG_DATE -Iseconds 2>/dev/null || date -r $CHANGELOG_PREV_TAG_DATE -Iseconds 2>/dev/null || echo "unknown")
+            CHANGELOG_END_ISO=$(date -d @$CHANGELOG_CURRENT_DATE -Iseconds 2>/dev/null || date -r $CHANGELOG_CURRENT_DATE -Iseconds 2>/dev/null || echo "unknown")
+            echo "  Looking for PRs merged between $CHANGELOG_START_ISO and $CHANGELOG_END_ISO for changelog"
+
+            # Fetch PRs merged in a reasonable time range (more than needed to be safe)
+            echo "  Fetching recent merged PRs for changelog..."
+            gh pr list --state merged --limit 200 --json number,title,url,mergedAt > changelog_prs_all.json 2>/dev/null || echo "[]" > changelog_prs_all.json
+
+            # Check if we got any PRs
+            CHANGELOG_PR_COUNT=$(cat changelog_prs_all.json | grep -o '"number":' | wc -l || echo "0")
+            echo "  Fetched $CHANGELOG_PR_COUNT total PRs for changelog"
+
+            # Track unique PRs to avoid duplicates
+            declare -A changelog_seen_prs
+
+            # Use jq if available, otherwise fall back to manual parsing
+            if command -v jq >/dev/null 2>&1; then
+              echo "  Using jq for JSON parsing (changelog)"
+              # Use jq to properly parse JSON and filter by date
+              while IFS= read -r pr_data; do
+                if [ -n "$pr_data" ] && [ "$pr_data" != "null" ]; then
+                  pr_number=$(echo "$pr_data" | jq -r '.number // empty')
+                  pr_title=$(echo "$pr_data" | jq -r '.title // empty')
+                  pr_url=$(echo "$pr_data" | jq -r '.url // empty')
+                  pr_merged_at=$(echo "$pr_data" | jq -r '.mergedAt // empty')
+
+                  if [ -n "$pr_number" ] && [ -n "$pr_title" ] && [ -n "$pr_merged_at" ] && [ -z "${changelog_seen_prs[$pr_number]}" ]; then
+                    # Convert PR merge time to timestamp
+                    pr_timestamp=$(date -d "$pr_merged_at" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "$pr_merged_at" +%s 2>/dev/null || echo "0")
+
+                    # Check if PR was merged in our time range (with some tolerance)
+                    if [ "$pr_timestamp" -gt "$CHANGELOG_PREV_TAG_DATE" ] && [ "$pr_timestamp" -le "$CHANGELOG_CURRENT_DATE" ]; then
+                      echo "  ✓ Found PR #$pr_number for changelog: $pr_title (merged: $pr_merged_at)"
+                      if [ -z "$COMMITS" ]; then
+                        COMMITS="- $pr_title ([#$pr_number]($pr_url))"
+                      else
+                        COMMITS="${COMMITS}"$'\n'"- $pr_title ([#$pr_number]($pr_url))"
+                      fi
+                      changelog_seen_prs[$pr_number]=1
+                    else
+                      echo "  ✗ Skipping PR #$pr_number for changelog: outside time range (merged: $pr_merged_at, timestamp: $pr_timestamp)"
+                    fi
+                  fi
+                fi
+              done < <(jq -c '.[]?' changelog_prs_all.json 2>/dev/null || echo "")
+            else
+              echo "  Using manual JSON parsing for changelog (jq not available)"
+              # Fallback: simplified approach without strict validation
+              # Just get PRs from the time range and include them all
+              CHANGELOG_COMMIT_RANGE_COMMITS=$(git rev-list $COMMIT_RANGE 2>/dev/null | wc -l || echo "0")
+              echo "  Found $CHANGELOG_COMMIT_RANGE_COMMITS commits in range $COMMIT_RANGE for changelog"
+
+              # If we have recent commits, be more liberal and include recent PRs
+              if [ "$CHANGELOG_COMMIT_RANGE_COMMITS" -gt "0" ]; then
+                # Get recent PRs (last 20) and include them
+                cat changelog_prs_all.json | head -20 | while IFS= read -r line; do
+                  if [[ "$line" == *'"number":'* ]]; then
+                    pr_number=$(echo "$line" | sed -n 's/.*"number":\([0-9]*\).*/\1/p')
+                    pr_title=$(echo "$line" | sed -n 's/.*"title":"\([^"]*\)".*/\1/p')
+                    pr_url=$(echo "$line" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
+
+                    if [ -n "$pr_number" ] && [ -n "$pr_title" ] && [ -z "${changelog_seen_prs[$pr_number]}" ]; then
+                      echo "  ✓ Including recent PR #$pr_number for changelog: $pr_title"
+                      if [ -z "$COMMITS" ]; then
+                        COMMITS="- $pr_title ([#$pr_number]($pr_url))"
+                      else
+                        COMMITS="${COMMITS}"$'\n'"- $pr_title ([#$pr_number]($pr_url))"
+                      fi
+                      changelog_seen_prs[$pr_number]=1
+                    fi
+                  fi
+                done
+              fi
+            fi
+
+            # Clean up temporary file
+            rm -f changelog_prs_all.json
+
+            if [ -z "$COMMITS" ]; then
+              echo "⚠️  No PRs found for changelog"
+              COMMITS="- Release v$VERSION"
+            fi
+
+            # Create the new changelog entry
+            if [ "$IS_PRERELEASE" = "true" ]; then
+              ENTRY_HEADER="## [$VERSION] - $RELEASE_DATE (Pre-release)"
+            else
+              ENTRY_HEADER="## [$VERSION] - $RELEASE_DATE"
+            fi
+
+            echo "📄 Creating changelog entry:"
+            echo "$ENTRY_HEADER" > new_entry.md
+            echo "" >> new_entry.md
+            echo "### Changes" >> new_entry.md
+            echo "$COMMITS" >> new_entry.md
+            echo "" >> new_entry.md
+
+            cat new_entry.md
+
+            # Create backup before modifying
+            cp CHANGELOG.md CHANGELOG.md.backup
+
+            # Use Python to update the changelog with better error handling
+            python3 << 'EOF'
+          import re
+          import sys
+
+          try:
+              # Read the current changelog
+              with open('CHANGELOG.md', 'r') as f:
+                  content = f.read()
+
+              # Read the new entry
+              with open('new_entry.md', 'r') as f:
+                  new_entry = f.read()
+
+              print("🔍 Searching for Unreleased section...")
+
+              # Find the Unreleased section and clear it, then add the new entry
+              unreleased_pattern = r'(## \[Unreleased\]\s*)(.*?)((?=## \[|\Z))'
+
+              def replace_unreleased(match):
+                  header = match.group(1)
+                  next_section = match.group(3)
+
+                  print("✅ Found Unreleased section, updating...")
+
+                  # Reset unreleased section
+                  new_unreleased = """
+          ### Added
+
+          ### Changed
+
+          ### Deprecated
+
+          ### Removed
+
+          ### Fixed
+
+          ### Security
+
+          """
+
+                  return header + new_unreleased + "\n" + new_entry.strip() + "\n\n" + next_section
+
+              updated_content = re.sub(unreleased_pattern, replace_unreleased, content, flags=re.DOTALL)
+
+              # Verify the replacement worked
+              if updated_content == content:
+                  print("❌ Failed to update changelog - no changes made")
+                  sys.exit(1)
+
+              # Write the updated changelog
+              with open('CHANGELOG.md', 'w') as f:
+                  f.write(updated_content)
+
+              print("✅ CHANGELOG.md updated successfully")
+
+          except Exception as e:
+              print(f"❌ Error updating CHANGELOG.md: {e}")
+              sys.exit(1)
+          EOF
+
+            # Verify the update was successful
+            if [ $? -eq 0 ]; then
+              if grep -q "## \[$VERSION\]" CHANGELOG.md; then
+                echo "✅ Changelog entry for v$VERSION successfully added"
+                rm -f new_entry.md CHANGELOG.md.backup
+              else
+                echo "❌ Changelog update failed - restoring backup"
+                mv CHANGELOG.md.backup CHANGELOG.md
+                exit 1
+              fi
+            else
+              echo "❌ Python script failed - restoring backup"
+              mv CHANGELOG.md.backup CHANGELOG.md
+              exit 1
+            fi
+          fi
+
+          echo "=== CHANGELOG.md update completed ==="
+
+      - name: Commit version bump and amend tag
+        run: |
+          VERSION=${{ steps.extract.outputs.version }}
+
+          echo "=== Committing version changes and changelog updates ==="
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Verify files exist and have been modified
+          echo "📋 Checking modified files:"
+          git status --porcelain
+
+          # Validate that expected files have been changed
+          for file in Cargo.toml crates/why_lib/Cargo.toml CHANGELOG.md; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Required file $file not found!"
+              exit 1
+            fi
+          done
+
+          # Check if there are actually changes to commit
+          if git diff --quiet HEAD -- Cargo.toml crates/why_lib/Cargo.toml CHANGELOG.md; then
+            echo "⚠️  No changes detected in version/changelog files"
+            echo "This might indicate the version was already updated"
+          else
+            echo "📝 Adding modified files to staging area..."
+            git add Cargo.toml crates/why_lib/Cargo.toml CHANGELOG.md
+
+            echo "💾 Creating commit for version v$VERSION..."
+            git commit -m "chore: bump version to $VERSION and update CHANGELOG
+
+            This commit was automatically generated by the release workflow.
+
+            Changes:
+            - Updated version in Cargo.toml files to $VERSION
+            - Updated CHANGELOG.md with release notes for v$VERSION
+
+            🤖 Generated by GitHub Actions"
+
+            if [ $? -eq 0 ]; then
+              echo "✅ Commit created successfully"
+
+              echo "🚀 Pushing version bump commit to remote..."
+              git push origin HEAD:main
+
+              if [ $? -eq 0 ]; then
+                echo "✅ Version bump commit pushed to remote successfully"
+              else
+                echo "❌ Failed to push version bump commit to remote"
+                exit 1
+              fi
+            else
+              echo "❌ Failed to create commit"
+              exit 1
+            fi
+          fi
+
+          echo "🏷️  Moving tag v$VERSION to point to latest commit..."
+
+          # Move the tag to point to the new commit
+          git tag -fa v$VERSION -m "Release v$VERSION
+
+          This release includes:
+          - Version bumped to $VERSION in all Cargo.toml files
+          - Updated CHANGELOG.md with release notes
+          - Cross-platform binaries for Linux, macOS, and Windows
+
+          🤖 Tag updated by GitHub Actions"
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Tag v$VERSION updated successfully"
+          else
+            echo "❌ Failed to update tag"
+            exit 1
+          fi
+
+          echo "🚀 Pushing updated tag to remote..."
+          git push origin v$VERSION --force
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Tag v$VERSION pushed to remote successfully"
+          else
+            echo "❌ Failed to push tag to remote"
+            exit 1
+          fi
+
+          echo "=== Version bump and tag update completed ==="
+
+      - name: Validate release preparation
+        run: |
+          VERSION=${{ steps.extract.outputs.version }}
+
+          echo "=== Validating release preparation for v$VERSION ==="
+
+          # Validate version consistency across files
+          echo "🔍 Checking version consistency..."
+
+          ROOT_VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+          LIB_VERSION=$(grep '^version = ' crates/why_lib/Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+
+          echo "Root Cargo.toml version: $ROOT_VERSION"
+          echo "Library Cargo.toml version: $LIB_VERSION"
+          echo "Expected version: $VERSION"
+
+          if [ "$ROOT_VERSION" != "$VERSION" ]; then
+            echo "❌ Root Cargo.toml version mismatch: expected $VERSION, got $ROOT_VERSION"
+            exit 1
+          fi
+
+          if [ "$LIB_VERSION" != "$VERSION" ]; then
+            echo "❌ Library Cargo.toml version mismatch: expected $VERSION, got $LIB_VERSION"
+            exit 1
+          fi
+
+          echo "✅ Version consistency check passed"
+
+          # Validate changelog was updated
+          echo "🔍 Checking changelog update..."
+
+          if ! grep -q "## \[$VERSION\]" CHANGELOG.md; then
+            echo "❌ CHANGELOG.md missing entry for version $VERSION"
+            exit 1
+          fi
+
+          # Check that unreleased section is properly reset
+          if ! grep -A 20 "## \[Unreleased\]" CHANGELOG.md | grep -q "### Added"; then
+            echo "❌ CHANGELOG.md Unreleased section not properly structured"
+            exit 1
+          fi
+
+          echo "✅ Changelog validation passed"
+
+          # Validate git state
+          echo "🔍 Checking git state..."
+
+          # Check that tag points to current commit
+          TAG_COMMIT=$(git rev-list -n 1 v$VERSION)
+          HEAD_COMMIT=$(git rev-parse HEAD)
+
+          if [ "$TAG_COMMIT" != "$HEAD_COMMIT" ]; then
+            echo "❌ Tag v$VERSION does not point to HEAD commit"
+            echo "Tag commit: $TAG_COMMIT"
+            echo "HEAD commit: $HEAD_COMMIT"
+            exit 1
+          fi
+
+          echo "✅ Git state validation passed"
+
+          # Show final state summary
+          echo "📊 Release preparation summary:"
+          echo "   Version: $VERSION"
+          echo "   Pre-release: ${{ steps.extract.outputs.is_prerelease }}"
+          echo "   Commit: $HEAD_COMMIT"
+          echo "   Tag: v$VERSION"
+
+          echo "✅ All validations passed - ready for build and release"
+
+  create-release:
+    name: Create Release
+    needs: update-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: v${{ needs.update-version.outputs.version }}
+          fetch-depth: 0
+
+      - name: Generate release notes
+        id: release_notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=${{ needs.update-version.outputs.version }}
+
+          echo "=== Generating release notes for v$VERSION ==="
+
+          # Extract changelog entry from CHANGELOG.md if it exists
+          if grep -q "## \[$VERSION\]" CHANGELOG.md; then
+            echo "📝 Extracting changelog from CHANGELOG.md..."
+
+            # Extract the specific version section from CHANGELOG.md
+            CHANGELOG_SECTION=$(awk "/## \[$VERSION\]/{flag=1; next} /## \[/{flag=0} flag" CHANGELOG.md | sed '/^$/d')
+
+            if [ -n "$CHANGELOG_SECTION" ]; then
+              echo "✅ Found changelog entry in CHANGELOG.md"
+              CHANGELOG_SOURCE="CHANGELOG.md"
+            else
+              echo "⚠️  Empty changelog section in CHANGELOG.md, falling back to git log"
+              CHANGELOG_SOURCE="git log"
+            fi
+          else
+            echo "⚠️  No changelog entry found in CHANGELOG.md, using git log"
+            CHANGELOG_SOURCE="git log"
+          fi
+
+          # Fallback to git log if changelog section is empty or not found
+          if [ "$CHANGELOG_SOURCE" = "git log" ]; then
+            PREV_TAG=$(git tag --sort=-version:refname | grep -v "v$VERSION" | head -n1)
+
+            if [ -n "$PREV_TAG" ]; then
+              echo "📊 Generating changelog from $PREV_TAG to v$VERSION"
+              COMMIT_RANGE="$PREV_TAG..v$VERSION"
+            else
+              echo "📊 No previous tag found, generating changelog from beginning"
+              COMMIT_RANGE="v$VERSION"
+            fi
+
+            echo "🔍 Finding PRs merged between $PREV_TAG and v$VERSION..."
+
+            # Generate PR-based changelog - only include PRs, no individual commits
+            CHANGELOG_SECTION="### Changes"
+
+            # Get the time range for this release
+            if [ -n "$PREV_TAG" ]; then
+              # Get the timestamp of the previous tag
+              PREV_TAG_DATE=$(git log -1 --format=%ct $PREV_TAG 2>/dev/null || echo "0")
+              echo "  Previous tag ($PREV_TAG) date: $(date -d @$PREV_TAG_DATE 2>/dev/null || date -r $PREV_TAG_DATE 2>/dev/null || echo 'unknown')"
+            else
+              # If no previous tag, use a very old date (1 year ago)
+              PREV_TAG_DATE=$(date -d "1 year ago" +%s 2>/dev/null || date -v-1y +%s 2>/dev/null || echo "0")
+              echo "  No previous tag, using 1 year ago as start date"
+            fi
+
+            # Get the timestamp of the current version tag (use tag creation time if it exists, otherwise now)
+            CURRENT_DATE=$(git log -1 --format=%ct v$VERSION 2>/dev/null || date +%s)
+            echo "  Current release (v$VERSION) date: $(date -d @$CURRENT_DATE 2>/dev/null || date -r $CURRENT_DATE 2>/dev/null || echo 'now')"
+
+            # Convert to ISO format for debugging
+            START_ISO=$(date -d @$PREV_TAG_DATE -Iseconds 2>/dev/null || date -r $PREV_TAG_DATE -Iseconds 2>/dev/null || echo "unknown")
+            END_ISO=$(date -d @$CURRENT_DATE -Iseconds 2>/dev/null || date -r $CURRENT_DATE -Iseconds 2>/dev/null || echo "unknown")
+            echo "  Looking for PRs merged between $START_ISO and $END_ISO"
+
+            # Fetch PRs merged in a reasonable time range (more than needed to be safe)
+            echo "  Fetching recent merged PRs..."
+            gh pr list --state merged --limit 200 --json number,title,url,mergedAt > prs_all.json 2>/dev/null || echo "[]" > prs_all.json
+
+            # Check if we got any PRs
+            PR_COUNT=$(cat prs_all.json | grep -o '"number":' | wc -l || echo "0")
+            echo "  Fetched $PR_COUNT total PRs"
+
+            # Track unique PRs to avoid duplicates
+            declare -A seen_prs
+
+            # Use jq if available, otherwise fall back to manual parsing
+            if command -v jq >/dev/null 2>&1; then
+              echo "  Using jq for JSON parsing"
+              # Use jq to properly parse JSON and filter by date
+              while IFS= read -r pr_data; do
+                if [ -n "$pr_data" ] && [ "$pr_data" != "null" ]; then
+                  pr_number=$(echo "$pr_data" | jq -r '.number // empty')
+                  pr_title=$(echo "$pr_data" | jq -r '.title // empty')
+                  pr_url=$(echo "$pr_data" | jq -r '.url // empty')
+                  pr_merged_at=$(echo "$pr_data" | jq -r '.mergedAt // empty')
+
+                  if [ -n "$pr_number" ] && [ -n "$pr_title" ] && [ -n "$pr_merged_at" ] && [ -z "${seen_prs[$pr_number]}" ]; then
+                    # Convert PR merge time to timestamp
+                    pr_timestamp=$(date -d "$pr_merged_at" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "$pr_merged_at" +%s 2>/dev/null || echo "0")
+
+                    # Check if PR was merged in our time range (with some tolerance)
+                    if [ "$pr_timestamp" -gt "$PREV_TAG_DATE" ] && [ "$pr_timestamp" -le "$CURRENT_DATE" ]; then
+                      echo "  ✓ Found PR #$pr_number: $pr_title (merged: $pr_merged_at)"
+                      CHANGELOG_SECTION="${CHANGELOG_SECTION}"$'\n'"- $pr_title ([#$pr_number]($pr_url))"
+                      seen_prs[$pr_number]=1
+                    else
+                      echo "  ✗ Skipping PR #$pr_number: outside time range (merged: $pr_merged_at, timestamp: $pr_timestamp)"
+                    fi
+                  fi
+                fi
+              done < <(jq -c '.[]?' prs_all.json 2>/dev/null || echo "")
+            else
+              echo "  Using manual JSON parsing (jq not available)"
+              # Fallback: simplified approach without strict validation
+              # Just get PRs from the time range and include them all
+              COMMIT_RANGE_COMMITS=$(git rev-list $COMMIT_RANGE 2>/dev/null | wc -l || echo "0")
+              echo "  Found $COMMIT_RANGE_COMMITS commits in range $COMMIT_RANGE"
+
+              # If we have recent commits, be more liberal and include recent PRs
+              if [ "$COMMIT_RANGE_COMMITS" -gt "0" ]; then
+                # Get recent PRs (last 20) and include them
+                cat prs_all.json | head -20 | while IFS= read -r line; do
+                  if [[ "$line" == *'"number":'* ]]; then
+                    pr_number=$(echo "$line" | sed -n 's/.*"number":\([0-9]*\).*/\1/p')
+                    pr_title=$(echo "$line" | sed -n 's/.*"title":"\([^"]*\)".*/\1/p')
+                    pr_url=$(echo "$line" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
+
+                    if [ -n "$pr_number" ] && [ -n "$pr_title" ] && [ -z "${seen_prs[$pr_number]}" ]; then
+                      echo "  ✓ Including recent PR #$pr_number: $pr_title"
+                      CHANGELOG_SECTION="${CHANGELOG_SECTION}"$'\n'"- $pr_title ([#$pr_number]($pr_url))"
+                      seen_prs[$pr_number]=1
+                    fi
+                  fi
+                done
+              fi
+            fi
+
+            # Clean up temporary file
+            rm -f prs_all.json
+
+            # If no PRs were found, add a fallback
+            if [ "$CHANGELOG_SECTION" = "### Changes" ]; then
+              CHANGELOG_SECTION="### Changes"$'\n'"- Release v$VERSION"
+            fi
+          fi
+
+          # Create comprehensive release notes
+          cat > release_notes.md << EOF
+          ## Release Notes
+
+          $CHANGELOG_SECTION
+
+          ## 📦 Binary Downloads
+
+          Download the appropriate binary for your platform:
+
+          | Platform | Architecture | Download |
+          |----------|--------------|----------|
+          | Linux | x86_64 | \`y-lang-v$VERSION-x86_64-unknown-linux-gnu.tar.gz\` |
+          | macOS | ARM64 (Apple Silicon) | \`y-lang-v$VERSION-aarch64-apple-darwin.tar.gz\` |
+
+          Each archive contains three binaries:
+          - **\`yc\`** - Y Lang compiler for compiling .why source files
+          - **\`yfmt\`** - Y Lang formatter for code formatting and pretty-printing
+          - **\`yls\`** - Y Lang language server for IDE integration
+
+          ## 🚀 Installation
+
+          ### Option 1: Download and Extract
+          1. Download the appropriate archive for your platform
+          2. Extract the archive: \`tar -xzf y-lang-v$VERSION-<platform>.tar.gz\`
+          3. Add the binaries to your PATH
+
+          ### Option 2: Install from Source
+          \`\`\`bash
+          cargo install --git https://github.com/H1ghBre4k3r/y-lang --tag v$VERSION
+          \`\`\`
+
+          ## 📚 Documentation
+
+          - [Project Repository](https://github.com/H1ghBre4k3r/y-lang)
+          - [Changelog](https://github.com/H1ghBre4k3r/y-lang/blob/main/CHANGELOG.md)
+
+          ---
+
+          **Full Changelog**: [v$VERSION](https://github.com/H1ghBre4k3r/y-lang/compare/$PREV_TAG...v$VERSION) ${PREV_TAG:+(compared to $PREV_TAG)}
+          EOF
+
+          echo "📋 Generated release notes:"
+          echo "Source: $CHANGELOG_SOURCE"
+          echo "Content preview:"
+          head -20 release_notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.update-version.outputs.version }}
+          name: v${{ needs.update-version.outputs.version }}
+          body_path: release_notes.md
+          prerelease: ${{ needs.update-version.outputs.is_prerelease == 'true' }}
+          generate_release_notes: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  build-and-release:
+    name: Build and Release
+    needs: [update-version, create-release]
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          # - target: x86_64-pc-windows-msvc
+          #   os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: v${{ needs.update-version.outputs.version }}
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "18.1"
+          directory: ${{ runner.temp }}/llvm
+
+      - name: Install Ubuntu dependencies
+        run: |
+          sudo apt update
+          wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
+          sudo apt install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+
+      - name: Build and upload binaries
+        uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: yc,yfmt,yls
+          target: ${{ matrix.target }}
+          archive: y-lang-v${{ needs.update-version.outputs.version }}-${{ matrix.target }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          checksum: sha256
+        env:
+          LLVM_SYS_181_PREFIX: ${{ env.LLVM_PATH }}
