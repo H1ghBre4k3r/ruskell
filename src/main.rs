@@ -18,6 +18,8 @@ enum Token {
     Colon,
     #[terminal("::")]
     DoubleColon,
+    #[terminal(":=")]
+    Assign,
 }
 
 struct ParseState {
@@ -55,23 +57,28 @@ main = do
     foo
 end
 
-foo = do 1 end
+foo = do 
+    bar := baz
+    bar
+end
 
+baz = do 
+    42
+end
 "#;
 
 #[derive(Debug, Clone)]
 enum Expression {
     SingularExpression(SingularExpression),
+    Assignment(Assignment),
 }
 
 impl Expression {
-    pub fn eval(&self, scope: &SimulationScope) -> RValue {
+    pub fn eval(&self, scope: &mut SimulationScope) -> RValue {
         match self {
             Expression::SingularExpression(singular_expression) => match singular_expression {
                 SingularExpression::Ident(ident) => {
-                    let Some(function_value) = scope.functions.get(&ident.value) else {
-                        todo!()
-                    };
+                    let function_value = scope.resolve(&ident.value);
 
                     function_value.run(&[], scope)
                 }
@@ -80,6 +87,16 @@ impl Expression {
                     RValue::String(string_literal.clone())
                 }
             },
+            Expression::Assignment(Assignment { name, value }) => {
+                let func = Function {
+                    name: name.clone(),
+                    args: (),
+                    expression: vec![*value.clone()],
+                };
+
+                scope.add(&name.value, func);
+                RValue::Unit
+            }
         }
     }
 }
@@ -88,9 +105,16 @@ impl Parse for Expression {
     fn parse(state: &mut ParseState) -> Self {
         match state.next() {
             Some(next) => match next {
-                Token::Ident(ident) => {
-                    Expression::SingularExpression(SingularExpression::Ident(ident))
-                }
+                Token::Ident(ident) => match state.peek() {
+                    Some(Token::Assign(_)) => {
+                        state.next();
+                        Expression::Assignment(Assignment {
+                            name: ident,
+                            value: Box::new(Expression::parse(state)),
+                        })
+                    }
+                    _ => Expression::SingularExpression(SingularExpression::Ident(ident)),
+                },
                 Token::Integer(integer) => {
                     Expression::SingularExpression(SingularExpression::Integer(integer))
                 }
@@ -108,6 +132,7 @@ impl Parse for Expression {
 enum RValue {
     Integer(Integer),
     String(StringLiteral),
+    Unit,
 }
 
 #[derive(Debug, Clone)]
@@ -115,6 +140,12 @@ enum SingularExpression {
     Ident(Ident),
     Integer(Integer),
     String(StringLiteral),
+}
+
+#[derive(Debug, Clone)]
+struct Assignment {
+    name: Ident,
+    value: Box<Expression>,
 }
 
 #[derive(Debug, Clone)]
@@ -126,12 +157,14 @@ struct Function {
 }
 
 impl Function {
-    pub fn run(&self, params: &[Expression], scope: &SimulationScope) -> RValue {
+    pub fn run(&self, params: &[Expression], scope: &mut SimulationScope) -> RValue {
         let Function {
             name,
             args,
             expression,
         } = self;
+
+        scope.enter();
 
         let mut i = 0;
 
@@ -139,7 +172,9 @@ impl Function {
             let expr = &expression[i];
 
             if i == expression.len() - 1 {
-                return expr.eval(scope);
+                let val = expr.eval(scope);
+                scope.leave();
+                return val;
             } else {
                 expr.eval(scope);
             }
@@ -147,7 +182,7 @@ impl Function {
             i += 1;
         }
 
-        todo!()
+        todo!("there should always be an exit expression")
     }
 }
 
@@ -175,7 +210,15 @@ impl Parse for Function {
             todo!()
         };
 
-        let expr = Expression::parse(state);
+        let mut expression = vec![];
+
+        loop {
+            if let Some(Token::End(_)) = state.peek() {
+                break;
+            }
+
+            expression.push(Expression::parse(state));
+        }
 
         let Some(Token::End(_)) = state.next() else {
             todo!()
@@ -184,30 +227,59 @@ impl Parse for Function {
         Function {
             name: fn_ident,
             args: (),
-            expression: vec![expr],
+            expression,
         }
     }
 }
 
 struct SimulationScope {
-    functions: HashMap<String, Function>,
+    scopes: Vec<HashMap<String, Function>>,
 }
 
 impl SimulationScope {
     fn new(functions: Vec<Function>) -> Self {
         Self {
-            functions: functions
-                .into_iter()
-                .map(|func| (func.name.value.clone(), func))
-                .collect::<HashMap<_, _>>(),
+            scopes: vec![
+                functions
+                    .into_iter()
+                    .map(|func| (func.name.value.clone(), func))
+                    .collect::<HashMap<_, _>>(),
+            ],
         }
+    }
+
+    fn enter(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    fn leave(&mut self) {
+        self.scopes.pop();
+    }
+
+    fn resolve(&self, name: impl ToString) -> Function {
+        let key = name.to_string();
+        self.scopes
+            .iter()
+            .rev()
+            .find(|scope| scope.contains_key(&key))
+            .expect("function should be somewhere")
+            .get(&key)
+            .unwrap()
+            .clone()
+    }
+
+    fn add(&mut self, name: impl ToString, func: Function) {
+        self.scopes
+            .last_mut()
+            .expect("Ok, this would be fucked")
+            .insert(name.to_string(), func);
     }
 }
 
 fn simulate(Program { main, functions }: Program) {
-    let scope = SimulationScope::new(functions);
+    let mut scope = SimulationScope::new(functions);
 
-    let return_value = main.run(&[], &scope);
+    let return_value = main.run(&[], &mut scope);
 
     match return_value {
         RValue::Integer(integer) => process::exit(
@@ -216,6 +288,7 @@ fn simulate(Program { main, functions }: Program) {
                 .parse()
                 .expect("This should, by definition, be an integer"),
         ),
+        RValue::Unit => process::exit(0),
         RValue::String(string_literal) => todo!(),
     }
 }
