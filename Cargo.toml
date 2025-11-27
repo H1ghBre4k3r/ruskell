@@ -6,4 +6,3 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.100"
 lachs = "0.1.4"
-lachs_derive = "0.1.4"

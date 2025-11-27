@@ -1,6 +1,6 @@
 use std::{collections::HashMap, process};
 
-#[lachs_derive::token]
+#[lachs::token]
 enum Token {
     #[terminal("do")]
     Do,
