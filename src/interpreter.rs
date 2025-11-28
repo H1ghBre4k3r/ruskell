@@ -20,10 +20,12 @@ pub struct SimulationScope {
 impl SimulationScope {
     pub fn new(functions: Vec<Function>) -> Self {
         Self {
-            frames: vec![functions
-                .into_iter()
-                .map(|func| (func.name.value.clone(), func))
-                .collect::<HashMap<_, _>>()],
+            frames: vec![
+                functions
+                    .into_iter()
+                    .map(|func| (func.name.value.clone(), func))
+                    .collect::<HashMap<_, _>>(),
+            ],
         }
     }
 

@@ -1,6 +1,5 @@
 use crate::interpreter::{RValue, SimulationScope};
-use crate::lexer::{Ident, Integer, StringLiteral, Token};
-use crate::parser::ParseState;
+use crate::lexer::{Ident, Integer, StringLiteral};
 
 #[derive(Debug, Clone)]
 pub enum Expression {
@@ -30,37 +29,6 @@ impl Expression {
                 scope.add(&name.value, func);
                 RValue::Unit
             }
-        }
-    }
-}
-
-pub trait Parse {
-    fn parse(state: &mut ParseState) -> Self;
-}
-
-impl Parse for Expression {
-    fn parse(state: &mut ParseState) -> Self {
-        match state.next() {
-            Some(next) => match next {
-                Token::Ident(ident) => match state.peek() {
-                    Some(Token::Assign(_)) => {
-                        state.next();
-                        Expression::Assignment(Assignment {
-                            name: ident,
-                            value: Box::new(Expression::parse(state)),
-                        })
-                    }
-                    _ => Expression::SingularExpression(SingularExpression::Ident(ident)),
-                },
-                Token::Integer(integer) => {
-                    Expression::SingularExpression(SingularExpression::Integer(integer))
-                }
-                Token::StringLiteral(string_literal) => {
-                    Expression::SingularExpression(SingularExpression::String(string_literal))
-                }
-                token => todo!("unexpected {token:?}"),
-            },
-            None => todo!(),
         }
     }
 }
@@ -111,42 +79,6 @@ impl Function {
         }
 
         todo!("there should always be an exit expression")
-    }
-}
-
-impl Parse for Function {
-    fn parse(state: &mut ParseState) -> Self {
-        let Some(Token::Ident(fn_ident)) = state.next() else {
-            todo!()
-        };
-
-        let Some(Token::Equals(_)) = state.next() else {
-            todo!()
-        };
-
-        let Some(Token::Do(_)) = state.next() else {
-            todo!()
-        };
-
-        let mut expression = vec![];
-
-        loop {
-            if let Some(Token::End(_)) = state.peek() {
-                break;
-            }
-
-            expression.push(Expression::parse(state));
-        }
-
-        let Some(Token::End(_)) = state.next() else {
-            todo!()
-        };
-
-        Function {
-            name: fn_ident,
-            args: (),
-            expression,
-        }
     }
 }
 
