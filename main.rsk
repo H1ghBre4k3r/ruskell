@@ -1,0 +1,55 @@
+main := do 
+    message := "Hello, World"
+    write message 
+
+    transform := \name => "Hello, ${name}"
+    greet := \name => do 
+        greeting := transform "Friend"
+        write greeting
+    end
+end
+
+add := \x, y => do
+    x + y
+end
+
+thread1 := \ch => do 
+    loop := \n => do
+        if n < 10 do
+            n -> ch
+            loop (n + 1)
+        else 
+            close ch
+        end
+    end
+
+    send 0
+end
+
+tread2 := \ch => do
+    while ch do
+        n <- ch
+        write n
+    end
+end
+
+thread3 := do 
+    while true do
+        n := rec
+        write n
+    end
+end
+
+thread4 := do
+    t := spawn thread3
+
+    loop := \n => do 
+        if n < 10 do
+            send t n
+            loop (n + 1)
+        end
+    end
+
+    loop 0
+    kill t
+end

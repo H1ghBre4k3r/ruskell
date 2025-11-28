@@ -1,4 +1,4 @@
-use std::{collections::HashMap, process};
+use std::{collections::HashMap, process, sync::Arc};
 
 #[lachs::token]
 enum Token {
@@ -232,14 +232,16 @@ impl Parse for Function {
     }
 }
 
+type ScopeFrame = HashMap<String, Function>;
+
 struct SimulationScope {
-    scopes: Vec<HashMap<String, Function>>,
+    frames: Vec<ScopeFrame>,
 }
 
 impl SimulationScope {
     fn new(functions: Vec<Function>) -> Self {
         Self {
-            scopes: vec![
+            frames: vec![
                 functions
                     .into_iter()
                     .map(|func| (func.name.value.clone(), func))
@@ -249,16 +251,16 @@ impl SimulationScope {
     }
 
     fn enter(&mut self) {
-        self.scopes.push(HashMap::new());
+        self.frames.push(HashMap::new());
     }
 
     fn leave(&mut self) {
-        self.scopes.pop();
+        self.frames.pop();
     }
 
     fn resolve(&self, name: impl ToString) -> Function {
         let key = name.to_string();
-        self.scopes
+        self.frames
             .iter()
             .rev()
             .find(|scope| scope.contains_key(&key))
@@ -269,7 +271,7 @@ impl SimulationScope {
     }
 
     fn add(&mut self, name: impl ToString, func: Function) {
-        self.scopes
+        self.frames
             .last_mut()
             .expect("Ok, this would be fucked")
             .insert(name.to_string(), func);
