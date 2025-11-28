@@ -1,0 +1,21 @@
+#[lachs::token]
+pub enum Token {
+    #[terminal("do")]
+    Do,
+    #[terminal("end")]
+    End,
+    #[literal("[a-zA-Z']*")]
+    Ident,
+    #[literal("[0-9]*")]
+    Integer,
+    #[literal(r#""([^"\\]|\\.)*""#)]
+    StringLiteral,
+    #[terminal("=")]
+    Equals,
+    #[terminal(":")]
+    Colon,
+    #[terminal("::")]
+    DoubleColon,
+    #[terminal(":=")]
+    Assign,
+}
