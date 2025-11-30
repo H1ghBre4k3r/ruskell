@@ -4,12 +4,18 @@ use super::statement::Statement;
 
 #[derive(Debug, Clone)]
 pub enum Expression<T> {
-    Unit,
+    Unit(Unit<T>),
     Ident(Ident<T>),
     Integer(Integer<T>),
     String(StringLiteral<T>),
     FunctionCall(FunctionCall<T>),
     Lambda(Lambda<T>),
+}
+
+#[derive(Debug, Clone)]
+pub struct Unit<T> {
+    pub position: Span,
+    pub info: T,
 }
 
 #[derive(Debug, Clone)]
@@ -59,5 +65,5 @@ pub struct Lambda<T> {
 #[derive(Debug, Clone)]
 pub enum LambdaParam<T> {
     Ident(Ident<T>),
-    Unit,
+    Unit(Unit<T>),
 }

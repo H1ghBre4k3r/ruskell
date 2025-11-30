@@ -1,6 +1,6 @@
 use crate::ast::{
     Function, Program,
-    expression::{Expression, FunctionCall, Lambda, LambdaBody, LambdaParam},
+    expression::{Expression, FunctionCall, Lambda, LambdaBody, LambdaParam, Unit},
     statement::{Assignment, Statement},
 };
 
@@ -13,9 +13,12 @@ use super::{
 /// unit_literal := "()"
 pub fn unit_literal() -> BoxedParser<Expression<()>> {
     BoxedParser::new(move |state: &mut ParseState| {
-        expect_lparen().parse(state)?;
-        expect_rparen().parse(state)?;
-        Ok(Expression::Unit)
+        let start = expect_lparen().parse(state)?.pos();
+        let end = expect_rparen().parse(state)?.pos();
+        Ok(Expression::Unit(Unit {
+            position: start.merge(&end),
+            info: (),
+        }))
     })
 }
 
@@ -96,8 +99,13 @@ pub fn lambda_param() -> BoxedParser<LambdaParam<()>> {
     BoxedParser::new(move |state: &mut ParseState| {
         // Try unit pattern first
         let pos = state.position();
-        if expect_lparen().parse(state).is_ok() && expect_rparen().parse(state).is_ok() {
-            return Ok(LambdaParam::Unit);
+        if let Ok(start) = expect_lparen().parse(state)
+            && let Ok(end) = expect_rparen().parse(state)
+        {
+            return Ok(LambdaParam::Unit(Unit {
+                position: start.pos().merge(&end.pos()),
+                info: (),
+            }));
         }
         state.restore(pos);
 

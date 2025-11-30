@@ -80,7 +80,7 @@ where
             }
             Expression::Integer(integer) => RValue::Integer(integer.clone()),
             Expression::String(string_literal) => RValue::String(string_literal.clone()),
-            Expression::Unit => RValue::Unit,
+            Expression::Unit(_) => RValue::Unit,
             Expression::Lambda(lambda) => RValue::Lambda(lambda.clone()),
             Expression::FunctionCall(FunctionCall { func, args, .. }) => {
                 let func_value = func.eval(scope);
@@ -106,7 +106,7 @@ where
         for (param, arg) in self.params.iter().zip(args.iter()) {
             match param {
                 LambdaParam::Ident(ident) => scope.add(&ident.value, arg.clone()),
-                LambdaParam::Unit => {
+                LambdaParam::Unit(_) => {
                     // Unit pattern - just verify the arg is unit (or ignore)
                     // For now, we don't enforce type checking
                 }
@@ -115,17 +115,7 @@ where
 
         let result = match &self.body {
             LambdaBody::Expression(expr) => expr.eval(scope),
-            LambdaBody::Block(statements) => {
-                let mut result = RValue::Unit;
-                for (i, stmt) in statements.iter().enumerate() {
-                    if i == statements.len() - 1 {
-                        result = stmt.eval(scope);
-                    } else {
-                        stmt.eval(scope);
-                    }
-                }
-                result
-            }
+            LambdaBody::Block(statements) => eval_block(statements, scope),
         };
 
         scope.leave();
@@ -147,6 +137,18 @@ where
             Statement::Expression(expression) => expression.eval(scope),
         }
     }
+}
+
+/// Evaluate a block of statements, returning the value of the last statement (or Unit if empty)
+fn eval_block<T>(statements: &[Statement<T>], scope: &mut SimulationScope<T>) -> RValue<T>
+where
+    T: Clone + Debug,
+{
+    statements
+        .iter()
+        .map(|stmt| stmt.eval(scope))
+        .last()
+        .unwrap_or(RValue::Unit)
 }
 
 pub fn simulate(Program { main, functions }: Program<()>) {
