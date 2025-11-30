@@ -1,5 +1,7 @@
 use lachs::Span;
 
+use super::statement::Statement;
+
 #[derive(Debug, Clone)]
 pub enum Expression<T> {
     Unit,
@@ -8,6 +10,12 @@ pub enum Expression<T> {
     String(StringLiteral<T>),
     FunctionCall(FunctionCall<T>),
     Lambda(Lambda<T>),
+}
+
+#[derive(Debug, Clone)]
+pub enum LambdaBody<T> {
+    Expression(Box<Expression<T>>),
+    Block(Vec<Statement<T>>),
 }
 
 #[derive(Debug, Clone)]
@@ -42,7 +50,7 @@ pub struct FunctionCall<T> {
 #[derive(Debug, Clone)]
 pub struct Lambda<T> {
     pub params: Vec<LambdaParam<T>>,
-    pub body: Vec<Expression<T>>,
+    pub body: LambdaBody<T>,
     pub position: Span,
     pub info: T,
 }

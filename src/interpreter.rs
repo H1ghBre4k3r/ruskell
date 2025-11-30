@@ -2,7 +2,7 @@ use std::process;
 use std::{collections::HashMap, fmt::Debug};
 
 use crate::ast::expression::{
-    Expression, FunctionCall, Integer, Lambda, LambdaParam, StringLiteral,
+    Expression, FunctionCall, Integer, Lambda, LambdaBody, LambdaParam, StringLiteral,
 };
 use crate::ast::statement::{Assignment, Statement};
 use crate::ast::{Function, Program};
@@ -115,23 +115,23 @@ where
             }
         }
 
-        let mut i = 0;
-        while i < self.body.len() {
-            let expr = &self.body[i];
-
-            if i == self.body.len() - 1 {
-                let val = expr.eval(scope);
-                scope.leave();
-                return val;
-            } else {
-                expr.eval(scope);
+        let result = match &self.body {
+            LambdaBody::Expression(expr) => expr.eval(scope),
+            LambdaBody::Block(statements) => {
+                let mut result = RValue::Unit;
+                for (i, stmt) in statements.iter().enumerate() {
+                    if i == statements.len() - 1 {
+                        result = stmt.eval(scope);
+                    } else {
+                        stmt.eval(scope);
+                    }
+                }
+                result
             }
-
-            i += 1;
-        }
+        };
 
         scope.leave();
-        RValue::Unit
+        result
     }
 }
 

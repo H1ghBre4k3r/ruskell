@@ -8,14 +8,15 @@ use lexer::Token;
 use parser::{ParseState, parse};
 
 const INPUT: &str = r#"
-
 main = do
-    double := \x => x
+    double := \x => do
+        intermediate := x
+        intermediate
+    end
     y := 42
     z := double(y)
     z
 end
-
 "#;
 
 fn main() -> anyhow::Result<()> {

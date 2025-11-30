@@ -1,13 +1,13 @@
 use crate::ast::{
     Function, Program,
-    expression::{Expression, FunctionCall, Lambda, LambdaParam},
+    expression::{Expression, FunctionCall, Lambda, LambdaBody, LambdaParam},
     statement::{Assignment, Statement},
 };
 
 use super::{
-    BoxedParser, ParseResult, ParseState, Parser, expect_arrow, expect_assign,
-    expect_backslash, expect_comma, expect_do, expect_end, expect_equals, expect_lparen,
-    expect_rparen, ident, integer, many, optional, string_literal,
+    BoxedParser, ParseResult, ParseState, Parser, expect_arrow, expect_assign, expect_backslash,
+    expect_comma, expect_do, expect_end, expect_equals, expect_lparen, expect_rparen, ident,
+    integer, many, optional, string_literal,
 };
 
 /// unit_literal := "()"
@@ -133,7 +133,7 @@ pub fn lambda_params() -> BoxedParser<Vec<LambdaParam<()>>> {
 }
 
 /// lambda := "\" lambda_params "=>" expression
-///         | "\" lambda_params "=>" "do" expression* "end"
+///         | "\" lambda_params "=>" "do" statement* "end"
 pub fn lambda() -> BoxedParser<Expression<()>> {
     BoxedParser::new(move |state: &mut ParseState| {
         let start = expect_backslash().parse(state)?.pos();
@@ -143,21 +143,20 @@ pub fn lambda() -> BoxedParser<Expression<()>> {
         // Check if it's a do-block or single expression
         let pos = state.position();
         if expect_do().parse(state).is_ok() {
-            let body = many(expression()).parse(state)?;
+            let body = many(statement()).parse(state)?;
             let end = expect_end().parse(state)?.pos();
             Ok(Expression::Lambda(Lambda {
                 params,
-                body,
+                body: LambdaBody::Block(body),
                 position: start.merge(&end),
                 info: (),
             }))
         } else {
             state.restore(pos);
-            // TODO: get access to position
             let expr = expression().parse(state)?;
             Ok(Expression::Lambda(Lambda {
                 params,
-                body: vec![expr],
+                body: LambdaBody::Expression(Box::new(expr)),
                 position: start,
                 info: (),
             }))

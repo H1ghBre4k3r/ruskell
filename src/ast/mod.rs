@@ -1,7 +1,4 @@
-use crate::ast::{
-    expression::Ident,
-    statement::Statement,
-};
+use crate::ast::{expression::Ident, statement::Statement};
 
 pub mod expression;
 pub mod statement;
