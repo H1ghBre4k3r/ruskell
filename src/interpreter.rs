@@ -75,7 +75,7 @@ where
                     .unwrap_or_else(|| panic!("undefined identifier: {}", ident.value));
                 // If it's a function with no args, call it immediately
                 match &value {
-                    RValue::Function(func) if func.args.is_empty() => func.run(&[], scope),
+                    RValue::Function(func) if func.lambda.params.is_empty() => func.run(&[], scope),
                     _ => value,
                 }
             }
@@ -140,30 +140,7 @@ where
     T: Clone + Debug,
 {
     pub fn run(&self, args: &[RValue<T>], scope: &mut SimulationScope<T>) -> RValue<T> {
-        scope.enter();
-
-        // Bind parameters to arguments
-        for (param, arg) in self.args.iter().zip(args.iter()) {
-            scope.add(&param.value, arg.clone());
-        }
-
-        let mut i = 0;
-        while i < self.expression.len() {
-            let expr = &self.expression[i];
-
-            if i == self.expression.len() - 1 {
-                let val = expr.eval(scope);
-                scope.leave();
-                return val;
-            } else {
-                expr.eval(scope);
-            }
-
-            i += 1;
-        }
-
-        scope.leave();
-        RValue::Unit
+        self.lambda.run(args, scope)
     }
 }
 

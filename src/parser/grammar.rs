@@ -214,14 +214,25 @@ pub fn expression() -> BoxedParser<Expression<()>> {
     })
 }
 
-/// function := ident "=" "do" expression* "end"
+/// function := ident "=" "do" statement* "end"
 pub fn function() -> BoxedParser<Function<()>> {
-    ((ident() - expect_equals() - expect_do()) + (many(statement()) - expect_end()))
-        >> |(name, exprs)| Function {
+    BoxedParser::new(move |state: &mut ParseState| {
+        let name = ident().parse(state)?;
+        expect_equals().parse(state)?;
+        let start = expect_do().parse(state)?.pos();
+        let body = many(statement()).parse(state)?;
+        let end = expect_end().parse(state)?.pos();
+
+        Ok(Function {
             name,
-            args: vec![],
-            expression: exprs,
-        }
+            lambda: Lambda {
+                params: vec![],
+                body: LambdaBody::Block(body),
+                position: start.merge(&end),
+                info: (),
+            },
+        })
+    })
 }
 
 /// program := function*
