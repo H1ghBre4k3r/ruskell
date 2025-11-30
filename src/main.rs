@@ -10,17 +10,12 @@ use parser::{ParseState, parse};
 const INPUT: &str = r#"
 
 main = do
-    foo
+    double := \x => x
+    y := 42
+    z := double(y)
+    z
 end
 
-foo = do 
-    bar := baz
-    bar
-end
-
-baz = do 
-    42
-end
 "#;
 
 fn main() -> anyhow::Result<()> {
@@ -28,6 +23,8 @@ fn main() -> anyhow::Result<()> {
     let mut state = ParseState::new(lexed);
 
     let program = parse(&mut state).expect("failed to parse program");
+
+    println!("{program:#?}");
 
     simulate(program);
 

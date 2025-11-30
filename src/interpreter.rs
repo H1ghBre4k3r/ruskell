@@ -1,26 +1,32 @@
-use std::collections::HashMap;
 use std::process;
+use std::{collections::HashMap, fmt::Debug};
 
-use crate::ast::{Function, Lambda, Program};
-use crate::lexer::{Integer, StringLiteral};
+use crate::ast::expression::{
+    Expression, FunctionCall, Integer, Lambda, LambdaParam, StringLiteral,
+};
+use crate::ast::statement::{Assignment, Statement};
+use crate::ast::{Function, Program};
 
 #[derive(Debug, Clone)]
-pub enum RValue {
-    Integer(Integer),
-    String(StringLiteral),
+pub enum RValue<T> {
     Unit,
-    Lambda(Lambda),
-    Function(Function),
+    Integer(Integer<T>),
+    String(StringLiteral<T>),
+    Lambda(Lambda<T>),
+    Function(Function<T>),
 }
 
-type ScopeFrame = HashMap<String, RValue>;
+type ScopeFrame<T> = HashMap<String, RValue<T>>;
 
-pub struct SimulationScope {
-    frames: Vec<ScopeFrame>,
+pub struct SimulationScope<T> {
+    frames: Vec<ScopeFrame<T>>,
 }
 
-impl SimulationScope {
-    pub fn new(functions: Vec<Function>) -> Self {
+impl<T> SimulationScope<T>
+where
+    T: Clone,
+{
+    pub fn new(functions: Vec<Function<T>>) -> Self {
         Self {
             frames: vec![
                 functions
@@ -39,7 +45,7 @@ impl SimulationScope {
         self.frames.pop();
     }
 
-    pub fn resolve(&self, name: impl ToString) -> Option<RValue> {
+    pub fn resolve(&self, name: impl ToString) -> Option<RValue<T>> {
         let key = name.to_string();
         self.frames
             .iter()
@@ -49,7 +55,7 @@ impl SimulationScope {
             .cloned()
     }
 
-    pub fn add(&mut self, name: impl ToString, value: RValue) {
+    pub fn add(&mut self, name: impl ToString, value: RValue<T>) {
         self.frames
             .last_mut()
             .expect("scope stack should not be empty")
@@ -57,18 +63,133 @@ impl SimulationScope {
     }
 }
 
-pub fn simulate(Program { main, functions }: Program) {
+impl<T> Expression<T>
+where
+    T: Clone + std::fmt::Debug,
+{
+    pub fn eval(&self, scope: &mut SimulationScope<T>) -> RValue<T> {
+        match self {
+            Expression::Ident(ident) => {
+                let value = scope
+                    .resolve(&ident.value)
+                    .unwrap_or_else(|| panic!("undefined identifier: {}", ident.value));
+                // If it's a function with no args, call it immediately
+                match &value {
+                    RValue::Function(func) if func.args.is_empty() => func.run(&[], scope),
+                    _ => value,
+                }
+            }
+            Expression::Integer(integer) => RValue::Integer(integer.clone()),
+            Expression::String(string_literal) => RValue::String(string_literal.clone()),
+            Expression::Unit => RValue::Unit,
+            Expression::Lambda(lambda) => RValue::Lambda(lambda.clone()),
+            Expression::FunctionCall(FunctionCall { func, args, .. }) => {
+                let func_value = func.eval(scope);
+                let evaluated_args: Vec<RValue<T>> = args.iter().map(|a| a.eval(scope)).collect();
+
+                match func_value {
+                    RValue::Lambda(lambda) => lambda.run(&evaluated_args, scope),
+                    RValue::Function(function) => function.run(&evaluated_args, scope),
+                    other => panic!("cannot call non-function value: {:?}", other),
+                }
+            }
+        }
+    }
+}
+
+impl<T> Lambda<T>
+where
+    T: Clone + Debug,
+{
+    pub fn run(&self, args: &[RValue<T>], scope: &mut SimulationScope<T>) -> RValue<T> {
+        scope.enter();
+
+        // Bind parameters to arguments
+        for (param, arg) in self.params.iter().zip(args.iter()) {
+            match param {
+                LambdaParam::Ident(ident) => scope.add(&ident.value, arg.clone()),
+                LambdaParam::Unit => {
+                    // Unit pattern - just verify the arg is unit (or ignore)
+                    // For now, we don't enforce type checking
+                }
+            }
+        }
+
+        let mut i = 0;
+        while i < self.body.len() {
+            let expr = &self.body[i];
+
+            if i == self.body.len() - 1 {
+                let val = expr.eval(scope);
+                scope.leave();
+                return val;
+            } else {
+                expr.eval(scope);
+            }
+
+            i += 1;
+        }
+
+        scope.leave();
+        RValue::Unit
+    }
+}
+
+impl<T> Function<T>
+where
+    T: Clone + Debug,
+{
+    pub fn run(&self, args: &[RValue<T>], scope: &mut SimulationScope<T>) -> RValue<T> {
+        scope.enter();
+
+        // Bind parameters to arguments
+        for (param, arg) in self.args.iter().zip(args.iter()) {
+            scope.add(&param.value, arg.clone());
+        }
+
+        let mut i = 0;
+        while i < self.expression.len() {
+            let expr = &self.expression[i];
+
+            if i == self.expression.len() - 1 {
+                let val = expr.eval(scope);
+                scope.leave();
+                return val;
+            } else {
+                expr.eval(scope);
+            }
+
+            i += 1;
+        }
+
+        scope.leave();
+        RValue::Unit
+    }
+}
+
+impl<T> Statement<T>
+where
+    T: Clone + Debug,
+{
+    pub fn eval(&self, scope: &mut SimulationScope<T>) -> RValue<T> {
+        match self {
+            Statement::Assignment(Assignment { name, value, .. }) => {
+                let evaluated = value.eval(scope);
+                scope.add(&name.value, evaluated);
+                RValue::Unit
+            }
+            Statement::Expression(expression) => expression.eval(scope),
+        }
+    }
+}
+
+pub fn simulate(Program { main, functions }: Program<()>) {
     let mut scope = SimulationScope::new(functions);
 
     let return_value = main.run(&[], &mut scope);
 
     match return_value {
-        RValue::Integer(integer) => process::exit(
-            integer
-                .value
-                .parse()
-                .expect("This should, by definition, be an integer"),
-        ),
+        RValue::Integer(integer) => process::exit(integer.value as i32),
         RValue::Unit => process::exit(0),
         RValue::String(_string_literal) => todo!("string return not implemented"),
         RValue::Lambda(_) => process::exit(0),

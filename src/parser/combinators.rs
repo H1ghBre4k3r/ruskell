@@ -1,6 +1,7 @@
 use std::ops::{Add, BitOr, Mul, Shr, Sub};
 use std::rc::Rc;
 
+use crate::ast;
 use crate::lexer::Token;
 
 use super::{ParseError, ParseResult, ParseState, Parser};
@@ -178,11 +179,15 @@ pub fn expect_rparen() -> BoxedParser<Token> {
     token(|t| matches!(t, Token::RParen(_)))
 }
 
-pub fn ident() -> BoxedParser<crate::lexer::Ident> {
+pub fn ident() -> BoxedParser<ast::expression::Ident<()>> {
     BoxedParser::new(|state: &mut ParseState| match state.peek() {
         Some(Token::Ident(_)) => {
             if let Token::Ident(id) = state.next().unwrap() {
-                Ok(id)
+                Ok(ast::expression::Ident {
+                    value: id.value,
+                    position: id.position,
+                    info: (),
+                })
             } else {
                 unreachable!()
             }
@@ -195,11 +200,15 @@ pub fn ident() -> BoxedParser<crate::lexer::Ident> {
     })
 }
 
-pub fn integer() -> BoxedParser<crate::lexer::Integer> {
+pub fn integer() -> BoxedParser<ast::expression::Integer<()>> {
     BoxedParser::new(|state: &mut ParseState| match state.peek() {
         Some(Token::Integer(_)) => {
             if let Token::Integer(int) = state.next().unwrap() {
-                Ok(int)
+                Ok(ast::expression::Integer {
+                    value: int.value.parse().expect("The grammar should prevent this"),
+                    position: int.position,
+                    info: (),
+                })
             } else {
                 unreachable!()
             }
@@ -209,11 +218,15 @@ pub fn integer() -> BoxedParser<crate::lexer::Integer> {
     })
 }
 
-pub fn string_literal() -> BoxedParser<crate::lexer::StringLiteral> {
+pub fn string_literal() -> BoxedParser<ast::expression::StringLiteral<()>> {
     BoxedParser::new(|state: &mut ParseState| match state.peek() {
         Some(Token::StringLiteral(_)) => {
             if let Token::StringLiteral(s) = state.next().unwrap() {
-                Ok(s)
+                Ok(ast::expression::StringLiteral {
+                    value: s.value,
+                    position: s.position,
+                    info: (),
+                })
             } else {
                 unreachable!()
             }
