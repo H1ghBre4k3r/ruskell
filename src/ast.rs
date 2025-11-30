@@ -5,6 +5,14 @@ use crate::lexer::{Ident, Integer, StringLiteral};
 pub enum Expression {
     SingularExpression(SingularExpression),
     Assignment(Assignment),
+    Lambda(Lambda),
+    FunctionCall(FunctionCall),
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionCall {
+    pub func: Box<Expression>,
+    pub args: Vec<Expression>,
 }
 
 impl Expression {
@@ -12,8 +20,14 @@ impl Expression {
         match self {
             Expression::SingularExpression(singular_expression) => match singular_expression {
                 SingularExpression::Ident(ident) => {
-                    let function_value = scope.resolve(&ident.value);
-                    function_value.run(&[], scope)
+                    let value = scope
+                        .resolve(&ident.value)
+                        .unwrap_or_else(|| panic!("undefined identifier: {}", ident.value));
+                    // If it's a function with no args, call it immediately
+                    match &value {
+                        RValue::Function(func) if func.args.is_empty() => func.run(&[], scope),
+                        _ => value,
+                    }
                 }
                 SingularExpression::Integer(integer) => RValue::Integer(integer.clone()),
                 SingularExpression::String(string_literal) => {
@@ -21,15 +35,57 @@ impl Expression {
                 }
             },
             Expression::Assignment(Assignment { name, value }) => {
-                let func = Function {
-                    name: name.clone(),
-                    args: (),
-                    expression: vec![*value.clone()],
-                };
-                scope.add(&name.value, func);
+                let evaluated = value.eval(scope);
+                scope.add(&name.value, evaluated);
                 RValue::Unit
             }
+            Expression::Lambda(lambda) => RValue::Lambda(lambda.clone()),
+            Expression::FunctionCall(FunctionCall { func, args }) => {
+                let func_value = func.eval(scope);
+                let evaluated_args: Vec<RValue> = args.iter().map(|a| a.eval(scope)).collect();
+
+                match func_value {
+                    RValue::Lambda(lambda) => lambda.run(&evaluated_args, scope),
+                    RValue::Function(function) => function.run(&evaluated_args, scope),
+                    other => panic!("cannot call non-function value: {:?}", other),
+                }
+            }
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Lambda {
+    pub params: Vec<Ident>,
+    pub body: Vec<Expression>,
+}
+
+impl Lambda {
+    pub fn run(&self, args: &[RValue], scope: &mut SimulationScope) -> RValue {
+        scope.enter();
+
+        // Bind parameters to arguments
+        for (param, arg) in self.params.iter().zip(args.iter()) {
+            scope.add(&param.value, arg.clone());
+        }
+
+        let mut i = 0;
+        while i < self.body.len() {
+            let expr = &self.body[i];
+
+            if i == self.body.len() - 1 {
+                let val = expr.eval(scope);
+                scope.leave();
+                return val;
+            } else {
+                expr.eval(scope);
+            }
+
+            i += 1;
+        }
+
+        scope.leave();
+        RValue::Unit
     }
 }
 
@@ -49,25 +105,24 @@ pub struct Assignment {
 #[derive(Debug, Clone)]
 pub struct Function {
     pub name: Ident,
-    pub args: (),
+    pub args: Vec<Ident>,
     pub expression: Vec<Expression>,
 }
 
 impl Function {
-    pub fn run(&self, _params: &[Expression], scope: &mut SimulationScope) -> RValue {
-        let Function {
-            name: _,
-            args: _,
-            expression,
-        } = self;
-
+    pub fn run(&self, args: &[RValue], scope: &mut SimulationScope) -> RValue {
         scope.enter();
 
-        let mut i = 0;
-        while i < expression.len() {
-            let expr = &expression[i];
+        // Bind parameters to arguments
+        for (param, arg) in self.args.iter().zip(args.iter()) {
+            scope.add(&param.value, arg.clone());
+        }
 
-            if i == expression.len() - 1 {
+        let mut i = 0;
+        while i < self.expression.len() {
+            let expr = &self.expression[i];
+
+            if i == self.expression.len() - 1 {
                 let val = expr.eval(scope);
                 scope.leave();
                 return val;
@@ -78,7 +133,8 @@ impl Function {
             i += 1;
         }
 
-        todo!("there should always be an exit expression")
+        scope.leave();
+        RValue::Unit
     }
 }
 

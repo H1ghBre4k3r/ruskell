@@ -158,6 +158,18 @@ pub fn expect_assign() -> BoxedParser<Token> {
     token(|t| matches!(t, Token::Assign(_)))
 }
 
+pub fn expect_backslash() -> BoxedParser<Token> {
+    token(|t| matches!(t, Token::Backslash(_)))
+}
+
+pub fn expect_arrow() -> BoxedParser<Token> {
+    token(|t| matches!(t, Token::Arrow(_)))
+}
+
+pub fn expect_comma() -> BoxedParser<Token> {
+    token(|t| matches!(t, Token::Comma(_)))
+}
+
 pub fn ident() -> BoxedParser<crate::lexer::Ident> {
     BoxedParser::new(|state: &mut ParseState| match state.peek() {
         Some(Token::Ident(_)) => {

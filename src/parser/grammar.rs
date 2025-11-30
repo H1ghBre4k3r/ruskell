@@ -1,8 +1,11 @@
-use crate::ast::{Assignment, Expression, Function, Program, SingularExpression};
+use crate::ast::{
+    Assignment, Expression, Function, FunctionCall, Lambda, Program, SingularExpression,
+};
 
 use super::{
-    BoxedParser, ParseError, ParseResult, ParseState, Parser, expect_assign, expect_do, expect_end,
-    expect_equals, ident, integer, many, string_literal,
+    BoxedParser, ParseError, ParseResult, ParseState, Parser, expect_arrow, expect_assign,
+    expect_backslash, expect_comma, expect_do, expect_end, expect_equals, ident, integer, many,
+    many1, optional, string_literal,
 };
 
 /// singular := ident | integer | string
@@ -15,9 +18,85 @@ pub fn singular_expression() -> BoxedParser<Expression> {
     ident_expr | int_expr | str_expr
 }
 
+/// atom := integer | string (things that can be unambiguous arguments)
+/// Note: identifiers are NOT atoms to avoid greedy parsing issues
+pub fn atom() -> BoxedParser<Expression> {
+    let int_expr = integer() >> |i| Expression::SingularExpression(SingularExpression::Integer(i));
+    let str_expr =
+        string_literal() >> |s| Expression::SingularExpression(SingularExpression::String(s));
+
+    int_expr | str_expr
+}
+
+/// function_call := ident atom+
+/// Only matches when there's at least one unambiguous argument (int/string)
+pub fn function_call() -> BoxedParser<Expression> {
+    BoxedParser::new(move |state: &mut ParseState| {
+        let func_ident = ident().parse(state)?;
+        let func_expr = Expression::SingularExpression(SingularExpression::Ident(func_ident));
+
+        let args = many1(atom()).parse(state)?;
+
+        Ok(Expression::FunctionCall(FunctionCall {
+            func: Box::new(func_expr),
+            args,
+        }))
+    })
+}
+
+/// lambda_params := ident ("," ident)*
+pub fn lambda_params() -> BoxedParser<Vec<crate::lexer::Ident>> {
+    BoxedParser::new(move |state: &mut ParseState| {
+        let first = ident().parse(state)?;
+        let mut params = vec![first];
+
+        loop {
+            let pos = state.position();
+            if optional(expect_comma()).parse(state)?.is_some() {
+                match ident().parse(state) {
+                    Ok(param) => params.push(param),
+                    Err(_) => {
+                        state.restore(pos);
+                        break;
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+
+        Ok(params)
+    })
+}
+
+/// lambda := "\" lambda_params "=>" expression
+///         | "\" lambda_params "=>" "do" expression* "end"
+pub fn lambda() -> BoxedParser<Expression> {
+    BoxedParser::new(move |state: &mut ParseState| {
+        expect_backslash().parse(state)?;
+        let params = lambda_params().parse(state)?;
+        expect_arrow().parse(state)?;
+
+        // Check if it's a do-block or single expression
+        let pos = state.position();
+        if expect_do().parse(state).is_ok() {
+            let body = many(expression()).parse(state)?;
+            expect_end().parse(state)?;
+            Ok(Expression::Lambda(Lambda { params, body }))
+        } else {
+            state.restore(pos);
+            let expr = expression().parse(state)?;
+            Ok(Expression::Lambda(Lambda {
+                params,
+                body: vec![expr],
+            }))
+        }
+    })
+}
+
 /// assignment := ident ":=" expression
 pub fn assignment() -> BoxedParser<Expression> {
-    (ident() - expect_assign()) + expression()
+    ((ident() - expect_assign()) + expression())
         >> |(name, value)| {
             Expression::Assignment(Assignment {
                 name,
@@ -26,13 +105,25 @@ pub fn assignment() -> BoxedParser<Expression> {
         }
 }
 
-/// expression := assignment | singular
+/// expression := assignment | lambda | function_call | singular
 pub fn expression() -> BoxedParser<Expression> {
     BoxedParser::new(move |state: &mut ParseState| {
         let pos = state.position();
 
         // Try assignment first (needs lookahead for `:=`)
         if let Ok(expr) = assignment().parse(state) {
+            return Ok(expr);
+        }
+        state.restore(pos);
+
+        // Try lambda
+        if let Ok(expr) = lambda().parse(state) {
+            return Ok(expr);
+        }
+        state.restore(pos);
+
+        // Try function call (ident followed by args)
+        if let Ok(expr) = function_call().parse(state) {
             return Ok(expr);
         }
         state.restore(pos);
@@ -44,10 +135,10 @@ pub fn expression() -> BoxedParser<Expression> {
 
 /// function := ident "=" "do" expression* "end"
 pub fn function() -> BoxedParser<Function> {
-    (ident() - expect_equals() - expect_do()) + (many(expression()) - expect_end())
+    ((ident() - expect_equals() - expect_do()) + (many(expression()) - expect_end()))
         >> |(name, exprs)| Function {
             name,
-            args: (),
+            args: vec![],
             expression: exprs,
         }
 }

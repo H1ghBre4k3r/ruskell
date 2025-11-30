@@ -18,4 +18,10 @@ pub enum Token {
     DoubleColon,
     #[terminal(":=")]
     Assign,
+    #[terminal("\\")]
+    Backslash,
+    #[terminal("=>")]
+    Arrow,
+    #[terminal(",")]
+    Comma,
 }
