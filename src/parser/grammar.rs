@@ -4,8 +4,8 @@ use crate::ast::{
 
 use super::{
     BoxedParser, ParseError, ParseResult, ParseState, Parser, expect_arrow, expect_assign,
-    expect_backslash, expect_comma, expect_do, expect_end, expect_equals, ident, integer, many,
-    many1, optional, string_literal,
+    expect_backslash, expect_comma, expect_do, expect_end, expect_equals, expect_lparen,
+    expect_rparen, ident, integer, many, optional, string_literal,
 };
 
 /// singular := ident | integer | string
@@ -18,24 +18,49 @@ pub fn singular_expression() -> BoxedParser<Expression> {
     ident_expr | int_expr | str_expr
 }
 
-/// atom := integer | string (things that can be unambiguous arguments)
-/// Note: identifiers are NOT atoms to avoid greedy parsing issues
-pub fn atom() -> BoxedParser<Expression> {
-    let int_expr = integer() >> |i| Expression::SingularExpression(SingularExpression::Integer(i));
-    let str_expr =
-        string_literal() >> |s| Expression::SingularExpression(SingularExpression::String(s));
+/// call_args := expression ("," expression)*
+pub fn call_args() -> BoxedParser<Vec<Expression>> {
+    BoxedParser::new(move |state: &mut ParseState| {
+        let first = expression().parse(state)?;
+        let mut args = vec![first];
 
-    int_expr | str_expr
+        loop {
+            let pos = state.position();
+            if optional(expect_comma()).parse(state)?.is_some() {
+                match expression().parse(state) {
+                    Ok(arg) => args.push(arg),
+                    Err(_) => {
+                        state.restore(pos);
+                        break;
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+
+        Ok(args)
+    })
 }
 
-/// function_call := ident atom+
-/// Only matches when there's at least one unambiguous argument (int/string)
+/// function_call := ident "(" [call_args] ")"
 pub fn function_call() -> BoxedParser<Expression> {
     BoxedParser::new(move |state: &mut ParseState| {
         let func_ident = ident().parse(state)?;
         let func_expr = Expression::SingularExpression(SingularExpression::Ident(func_ident));
 
-        let args = many1(atom()).parse(state)?;
+        expect_lparen().parse(state)?;
+
+        // Check for empty args: fn()
+        let pos = state.position();
+        let args = if expect_rparen().parse(state).is_ok() {
+            vec![]
+        } else {
+            state.restore(pos);
+            let args = call_args().parse(state)?;
+            expect_rparen().parse(state)?;
+            args
+        };
 
         Ok(Expression::FunctionCall(FunctionCall {
             func: Box::new(func_expr),
