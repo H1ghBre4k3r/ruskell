@@ -170,6 +170,14 @@ pub fn expect_comma() -> BoxedParser<Token> {
     token(|t| matches!(t, Token::Comma(_)))
 }
 
+pub fn expect_lparen() -> BoxedParser<Token> {
+    token(|t| matches!(t, Token::LParen(_)))
+}
+
+pub fn expect_rparen() -> BoxedParser<Token> {
+    token(|t| matches!(t, Token::RParen(_)))
+}
+
 pub fn ident() -> BoxedParser<crate::lexer::Ident> {
     BoxedParser::new(|state: &mut ParseState| match state.peek() {
         Some(Token::Ident(_)) => {

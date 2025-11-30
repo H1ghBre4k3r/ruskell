@@ -24,4 +24,8 @@ pub enum Token {
     Arrow,
     #[terminal(",")]
     Comma,
+    #[terminal("(")]
+    LParen,
+    #[terminal(")")]
+    RParen,
 }

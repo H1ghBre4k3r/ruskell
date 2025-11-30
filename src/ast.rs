@@ -33,6 +33,7 @@ impl Expression {
                 SingularExpression::String(string_literal) => {
                     RValue::String(string_literal.clone())
                 }
+                SingularExpression::Unit => RValue::Unit,
             },
             Expression::Assignment(Assignment { name, value }) => {
                 let evaluated = value.eval(scope);
@@ -54,9 +55,16 @@ impl Expression {
     }
 }
 
+/// Lambda parameter - either a named identifier or unit pattern
+#[derive(Debug, Clone)]
+pub enum LambdaParam {
+    Ident(Ident),
+    Unit,
+}
+
 #[derive(Debug, Clone)]
 pub struct Lambda {
-    pub params: Vec<Ident>,
+    pub params: Vec<LambdaParam>,
     pub body: Vec<Expression>,
 }
 
@@ -66,7 +74,13 @@ impl Lambda {
 
         // Bind parameters to arguments
         for (param, arg) in self.params.iter().zip(args.iter()) {
-            scope.add(&param.value, arg.clone());
+            match param {
+                LambdaParam::Ident(ident) => scope.add(&ident.value, arg.clone()),
+                LambdaParam::Unit => {
+                    // Unit pattern - just verify the arg is unit (or ignore)
+                    // For now, we don't enforce type checking
+                }
+            }
         }
 
         let mut i = 0;
@@ -94,6 +108,7 @@ pub enum SingularExpression {
     Ident(Ident),
     Integer(Integer),
     String(StringLiteral),
+    Unit,
 }
 
 #[derive(Debug, Clone)]
