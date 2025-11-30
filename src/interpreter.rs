@@ -13,7 +13,6 @@ pub enum RValue<T> {
     Integer(Integer<T>),
     String(StringLiteral<T>),
     Lambda(Lambda<T>),
-    Function(Function<T>),
 }
 
 type ScopeFrame<T> = HashMap<String, RValue<T>>;
@@ -31,7 +30,7 @@ where
             frames: vec![
                 functions
                     .into_iter()
-                    .map(|func| (func.name.value.clone(), RValue::Function(func)))
+                    .map(|func| (func.name.value.clone(), RValue::Lambda(func.lambda)))
                     .collect::<HashMap<_, _>>(),
             ],
         }
@@ -73,9 +72,9 @@ where
                 let value = scope
                     .resolve(&ident.value)
                     .unwrap_or_else(|| panic!("undefined identifier: {}", ident.value));
-                // If it's a function with no args, call it immediately
+                // If it's a nullary lambda (no params), call it immediately
                 match &value {
-                    RValue::Function(func) if func.lambda.params.is_empty() => func.run(&[], scope),
+                    RValue::Lambda(lambda) if lambda.params.is_empty() => lambda.run(&[], scope),
                     _ => value,
                 }
             }
@@ -89,7 +88,6 @@ where
 
                 match func_value {
                     RValue::Lambda(lambda) => lambda.run(&evaluated_args, scope),
-                    RValue::Function(function) => function.run(&evaluated_args, scope),
                     other => panic!("cannot call non-function value: {:?}", other),
                 }
             }
@@ -135,15 +133,6 @@ where
     }
 }
 
-impl<T> Function<T>
-where
-    T: Clone + Debug,
-{
-    pub fn run(&self, args: &[RValue<T>], scope: &mut SimulationScope<T>) -> RValue<T> {
-        self.lambda.run(args, scope)
-    }
-}
-
 impl<T> Statement<T>
 where
     T: Clone + Debug,
@@ -163,13 +152,12 @@ where
 pub fn simulate(Program { main, functions }: Program<()>) {
     let mut scope = SimulationScope::new(functions);
 
-    let return_value = main.run(&[], &mut scope);
+    let return_value = main.lambda.run(&[], &mut scope);
 
     match return_value {
         RValue::Integer(integer) => process::exit(integer.value as i32),
         RValue::Unit => process::exit(0),
         RValue::String(_string_literal) => todo!("string return not implemented"),
         RValue::Lambda(_) => process::exit(0),
-        RValue::Function(_) => process::exit(0),
     }
 }
