@@ -1,7 +1,6 @@
 use std::ops::{Add, BitOr, Mul, Shr, Sub};
 use std::rc::Rc;
 
-use crate::ast;
 use crate::lexer::Token;
 
 use super::state::{ParseError, ParseResult, ParseState, Parser};
@@ -179,63 +178,6 @@ pub fn expect_lparen() -> BoxedParser<Token> {
 
 pub fn expect_rparen() -> BoxedParser<Token> {
     token(|t| matches!(t, Token::RParen(_)))
-}
-
-pub fn ident() -> BoxedParser<ast::expression::Ident<()>> {
-    BoxedParser::new(|state: &mut ParseState| match state.peek() {
-        Some(Token::Ident(_)) => {
-            if let Token::Ident(id) = state.advance().unwrap() {
-                Ok(ast::expression::Ident {
-                    value: id.value,
-                    position: id.position,
-                    info: (),
-                })
-            } else {
-                unreachable!()
-            }
-        }
-        Some(tok) => Err(ParseError::new(format!(
-            "expected identifier, got {:?}",
-            tok
-        ))),
-        None => Err(ParseError::new("expected identifier, got end of input")),
-    })
-}
-
-pub fn integer() -> BoxedParser<ast::expression::Integer<()>> {
-    BoxedParser::new(|state: &mut ParseState| match state.peek() {
-        Some(Token::Integer(_)) => {
-            if let Token::Integer(int) = state.advance().unwrap() {
-                Ok(ast::expression::Integer {
-                    value: int.value.parse().expect("The grammar should prevent this"),
-                    position: int.position,
-                    info: (),
-                })
-            } else {
-                unreachable!()
-            }
-        }
-        Some(tok) => Err(ParseError::new(format!("expected integer, got {:?}", tok))),
-        None => Err(ParseError::new("expected integer, got end of input")),
-    })
-}
-
-pub fn string_literal() -> BoxedParser<ast::expression::StringLiteral<()>> {
-    BoxedParser::new(|state: &mut ParseState| match state.peek() {
-        Some(Token::StringLiteral(_)) => {
-            if let Token::StringLiteral(s) = state.advance().unwrap() {
-                Ok(ast::expression::StringLiteral {
-                    value: s.value,
-                    position: s.position,
-                    info: (),
-                })
-            } else {
-                unreachable!()
-            }
-        }
-        Some(tok) => Err(ParseError::new(format!("expected string, got {:?}", tok))),
-        None => Err(ParseError::new("expected string, got end of input")),
-    })
 }
 
 /// Parse zero or more occurrences

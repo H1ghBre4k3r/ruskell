@@ -1,26 +1,19 @@
-use crate::ast::{
-    Function, Program,
-    expression::{Expression, FunctionCall, Lambda, LambdaBody, LambdaParam, Unit},
-    statement::{Assignment, Statement},
-};
+//! Expression parsers for the Ruskell language
 
-use super::combinators::{
-    BoxedParser, expect_arrow, expect_assign, expect_backslash, expect_comma, expect_do,
-    expect_end, expect_equals, expect_lparen, expect_rparen, ident, integer, many, optional,
-    string_literal,
+use crate::ast::expression::{Expression, FunctionCall, Lambda, LambdaBody, LambdaParam};
+
+use crate::parser::combinators::{
+    BoxedParser, expect_arrow, expect_backslash, expect_comma, expect_do, expect_end,
+    expect_lparen, expect_rparen, many, optional,
 };
-use super::state::{ParseResult, ParseState, Parser};
+use crate::parser::state::{ParseState, Parser};
+
+use super::literal::{ident, integer, string_literal, unit};
+use super::statement::statement;
 
 /// unit_literal := "()"
 pub fn unit_literal() -> BoxedParser<Expression<()>> {
-    BoxedParser::new(move |state: &mut ParseState| {
-        let start = expect_lparen().parse(state)?.pos();
-        let end = expect_rparen().parse(state)?.pos();
-        Ok(Expression::Unit(Unit {
-            position: start.merge(&end),
-            info: (),
-        }))
-    })
+    unit() >> |u| Expression::Unit(u)
 }
 
 /// singular := unit_literal | ident | integer | string
@@ -42,7 +35,7 @@ pub fn singular_expression() -> BoxedParser<Expression<()>> {
 }
 
 /// call_args := expression ("," expression)*
-pub fn call_args() -> BoxedParser<Vec<Expression<()>>> {
+fn call_args() -> BoxedParser<Vec<Expression<()>>> {
     BoxedParser::new(move |state: &mut ParseState| {
         let first = expression().parse(state)?;
         let mut args = vec![first];
@@ -96,17 +89,12 @@ pub fn function_call() -> BoxedParser<Expression<()>> {
 }
 
 /// lambda_param := "()" | ident
-pub fn lambda_param() -> BoxedParser<LambdaParam<()>> {
+fn lambda_param() -> BoxedParser<LambdaParam<()>> {
     BoxedParser::new(move |state: &mut ParseState| {
         // Try unit pattern first
         let pos = state.position();
-        if let Ok(start) = expect_lparen().parse(state)
-            && let Ok(end) = expect_rparen().parse(state)
-        {
-            return Ok(LambdaParam::Unit(Unit {
-                position: start.pos().merge(&end.pos()),
-                info: (),
-            }));
+        if let Ok(u) = unit().parse(state) {
+            return Ok(LambdaParam::Unit(u));
         }
         state.restore(pos);
 
@@ -117,7 +105,7 @@ pub fn lambda_param() -> BoxedParser<LambdaParam<()>> {
 }
 
 /// lambda_params := lambda_param ("," lambda_param)*
-pub fn lambda_params() -> BoxedParser<Vec<LambdaParam<()>>> {
+fn lambda_params() -> BoxedParser<Vec<LambdaParam<()>>> {
     BoxedParser::new(move |state: &mut ParseState| {
         let first = lambda_param().parse(state)?;
         let mut params = vec![first];
@@ -173,35 +161,7 @@ pub fn lambda() -> BoxedParser<Expression<()>> {
     })
 }
 
-/// assignment := ident ":=" expression
-pub fn assignment() -> BoxedParser<Statement<()>> {
-    ((ident() - expect_assign()) + expression())
-        >> |(name, value)| {
-            let position = name.position.clone();
-            Statement::Assignment(Assignment {
-                name,
-                value: Box::new(value),
-                position,
-                info: (),
-            })
-        }
-}
-
-pub fn statement() -> BoxedParser<Statement<()>> {
-    BoxedParser::new(move |state: &mut ParseState| {
-        let pos = state.position();
-
-        // Try assignment first (needs lookahead for `:=`)
-        if let Ok(expr) = assignment().parse(state) {
-            return Ok(expr);
-        }
-        state.restore(pos);
-
-        expression().parse(state).map(Statement::Expression)
-    })
-}
-
-/// expression := assignment | lambda | function_call | singular
+/// expression := lambda | function_call | singular
 pub fn expression() -> BoxedParser<Expression<()>> {
     BoxedParser::new(move |state: &mut ParseState| {
         let pos = state.position();
@@ -221,51 +181,4 @@ pub fn expression() -> BoxedParser<Expression<()>> {
         // Fall back to singular
         singular_expression().parse(state)
     })
-}
-
-/// function := ident "=" "do" statement* "end"
-pub fn function() -> BoxedParser<Function<()>> {
-    BoxedParser::new(move |state: &mut ParseState| {
-        let name = ident().parse(state)?;
-        expect_equals().parse(state)?;
-        let start = expect_do().parse(state)?.pos();
-        let body = many(statement()).parse(state)?;
-        let end = expect_end().parse(state)?.pos();
-
-        Ok(Function {
-            name,
-            lambda: Lambda {
-                params: vec![],
-                body: LambdaBody::Block(body),
-                position: start.merge(&end),
-                info: (),
-            },
-        })
-    })
-}
-
-/// program := function*
-pub fn program() -> BoxedParser<Program<()>> {
-    many(function())
-        >> |functions| {
-            let main = functions
-                .iter()
-                .find(|f| f.name.value == "main")
-                .expect("program must have a main function")
-                .clone();
-
-            let other_functions = functions
-                .into_iter()
-                .filter(|f| f.name.value != "main")
-                .collect();
-
-            Program {
-                main,
-                functions: other_functions,
-            }
-        }
-}
-
-pub fn parse(state: &mut ParseState) -> ParseResult<Program<()>> {
-    program().parse(state)
 }

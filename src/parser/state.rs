@@ -13,6 +13,14 @@ impl ParseError {
     }
 }
 
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for ParseError {}
+
 pub type ParseResult<T> = Result<T, ParseError>;
 
 pub struct ParseState {
