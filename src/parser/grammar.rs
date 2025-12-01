@@ -4,11 +4,12 @@ use crate::ast::{
     statement::{Assignment, Statement},
 };
 
-use super::{
-    BoxedParser, ParseResult, ParseState, Parser, expect_arrow, expect_assign, expect_backslash,
-    expect_comma, expect_do, expect_end, expect_equals, expect_lparen, expect_rparen, ident,
-    integer, many, optional, string_literal,
+use super::combinators::{
+    BoxedParser, expect_arrow, expect_assign, expect_backslash, expect_comma, expect_do,
+    expect_end, expect_equals, expect_lparen, expect_rparen, ident, integer, many, optional,
+    string_literal,
 };
+use super::state::{ParseResult, ParseState, Parser};
 
 /// unit_literal := "()"
 pub fn unit_literal() -> BoxedParser<Expression<()>> {

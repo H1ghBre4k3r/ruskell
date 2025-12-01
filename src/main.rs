@@ -3,7 +3,6 @@ mod interpreter;
 mod lexer;
 mod parser;
 
-use interpreter::simulate;
 use lexer::Token;
 use parser::{ParseState, parse};
 
@@ -27,7 +26,7 @@ fn main() -> anyhow::Result<()> {
 
     println!("{program:#?}");
 
-    simulate(program);
+    interpreter::run(program);
 
     Ok(())
 }

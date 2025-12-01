@@ -4,12 +4,14 @@ use std::rc::Rc;
 use crate::ast;
 use crate::lexer::Token;
 
-use super::{ParseError, ParseResult, ParseState, Parser};
+use super::state::{ParseError, ParseResult, ParseState, Parser};
+
+type ParserFn<T> = Rc<dyn Fn(&mut ParseState) -> ParseResult<T>>;
 
 // === Boxed Parser for type erasure ===
 
 pub struct BoxedParser<T> {
-    parser: Rc<dyn Fn(&mut ParseState) -> ParseResult<T>>,
+    parser: ParserFn<T>,
 }
 
 impl<T> Clone for BoxedParser<T> {
@@ -137,7 +139,7 @@ impl<T: 'static, U: 'static, F: Fn(T) -> U + 'static> Shr<F> for BoxedParser<T> 
 
 pub fn token<F: Fn(&Token) -> bool + 'static>(predicate: F) -> BoxedParser<Token> {
     BoxedParser::new(move |state: &mut ParseState| match state.peek() {
-        Some(tok) if predicate(tok) => Ok(state.next().unwrap()),
+        Some(tok) if predicate(tok) => Ok(state.advance().unwrap()),
         Some(tok) => Err(ParseError::new(format!("unexpected token: {:?}", tok))),
         None => Err(ParseError::new("unexpected end of input")),
     })
@@ -182,7 +184,7 @@ pub fn expect_rparen() -> BoxedParser<Token> {
 pub fn ident() -> BoxedParser<ast::expression::Ident<()>> {
     BoxedParser::new(|state: &mut ParseState| match state.peek() {
         Some(Token::Ident(_)) => {
-            if let Token::Ident(id) = state.next().unwrap() {
+            if let Token::Ident(id) = state.advance().unwrap() {
                 Ok(ast::expression::Ident {
                     value: id.value,
                     position: id.position,
@@ -203,7 +205,7 @@ pub fn ident() -> BoxedParser<ast::expression::Ident<()>> {
 pub fn integer() -> BoxedParser<ast::expression::Integer<()>> {
     BoxedParser::new(|state: &mut ParseState| match state.peek() {
         Some(Token::Integer(_)) => {
-            if let Token::Integer(int) = state.next().unwrap() {
+            if let Token::Integer(int) = state.advance().unwrap() {
                 Ok(ast::expression::Integer {
                     value: int.value.parse().expect("The grammar should prevent this"),
                     position: int.position,
@@ -221,7 +223,7 @@ pub fn integer() -> BoxedParser<ast::expression::Integer<()>> {
 pub fn string_literal() -> BoxedParser<ast::expression::StringLiteral<()>> {
     BoxedParser::new(|state: &mut ParseState| match state.peek() {
         Some(Token::StringLiteral(_)) => {
-            if let Token::StringLiteral(s) = state.next().unwrap() {
+            if let Token::StringLiteral(s) = state.advance().unwrap() {
                 Ok(ast::expression::StringLiteral {
                     value: s.value,
                     position: s.position,
@@ -255,6 +257,7 @@ pub fn many<T: 'static>(parser: BoxedParser<T>) -> BoxedParser<Vec<T>> {
 }
 
 /// Parse one or more occurrences
+#[allow(dead_code)]
 pub fn many1<T: 'static>(parser: BoxedParser<T>) -> BoxedParser<Vec<T>> {
     BoxedParser::new(move |state: &mut ParseState| {
         let first = parser.parse(state)?;
