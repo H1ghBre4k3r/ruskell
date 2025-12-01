@@ -3,23 +3,18 @@ mod interpreter;
 mod lexer;
 mod parser;
 
-use interpreter::simulate;
 use lexer::Token;
 use parser::{ParseState, parse};
 
 const INPUT: &str = r#"
-
 main = do
-    foo
-end
-
-foo = do 
-    bar := baz
-    bar
-end
-
-baz = do 
-    42
+    double := \x => do
+        intermediate := x
+        intermediate
+    end
+    y := 42
+    z := double(y)
+    z
 end
 "#;
 
@@ -29,7 +24,9 @@ fn main() -> anyhow::Result<()> {
 
     let program = parse(&mut state).expect("failed to parse program");
 
-    simulate(program);
+    println!("{program:#?}");
+
+    interpreter::run(program);
 
     Ok(())
 }

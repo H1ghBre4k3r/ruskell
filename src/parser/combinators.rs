@@ -3,12 +3,14 @@ use std::rc::Rc;
 
 use crate::lexer::Token;
 
-use super::{ParseError, ParseResult, ParseState, Parser};
+use super::state::{ParseError, ParseResult, ParseState, Parser};
+
+type ParserFn<T> = Rc<dyn Fn(&mut ParseState) -> ParseResult<T>>;
 
 // === Boxed Parser for type erasure ===
 
 pub struct BoxedParser<T> {
-    parser: Rc<dyn Fn(&mut ParseState) -> ParseResult<T>>,
+    parser: ParserFn<T>,
 }
 
 impl<T> Clone for BoxedParser<T> {
@@ -136,7 +138,7 @@ impl<T: 'static, U: 'static, F: Fn(T) -> U + 'static> Shr<F> for BoxedParser<T> 
 
 pub fn token<F: Fn(&Token) -> bool + 'static>(predicate: F) -> BoxedParser<Token> {
     BoxedParser::new(move |state: &mut ParseState| match state.peek() {
-        Some(tok) if predicate(tok) => Ok(state.next().unwrap()),
+        Some(tok) if predicate(tok) => Ok(state.advance().unwrap()),
         Some(tok) => Err(ParseError::new(format!("unexpected token: {:?}", tok))),
         None => Err(ParseError::new("unexpected end of input")),
     })
@@ -178,51 +180,6 @@ pub fn expect_rparen() -> BoxedParser<Token> {
     token(|t| matches!(t, Token::RParen(_)))
 }
 
-pub fn ident() -> BoxedParser<crate::lexer::Ident> {
-    BoxedParser::new(|state: &mut ParseState| match state.peek() {
-        Some(Token::Ident(_)) => {
-            if let Token::Ident(id) = state.next().unwrap() {
-                Ok(id)
-            } else {
-                unreachable!()
-            }
-        }
-        Some(tok) => Err(ParseError::new(format!(
-            "expected identifier, got {:?}",
-            tok
-        ))),
-        None => Err(ParseError::new("expected identifier, got end of input")),
-    })
-}
-
-pub fn integer() -> BoxedParser<crate::lexer::Integer> {
-    BoxedParser::new(|state: &mut ParseState| match state.peek() {
-        Some(Token::Integer(_)) => {
-            if let Token::Integer(int) = state.next().unwrap() {
-                Ok(int)
-            } else {
-                unreachable!()
-            }
-        }
-        Some(tok) => Err(ParseError::new(format!("expected integer, got {:?}", tok))),
-        None => Err(ParseError::new("expected integer, got end of input")),
-    })
-}
-
-pub fn string_literal() -> BoxedParser<crate::lexer::StringLiteral> {
-    BoxedParser::new(|state: &mut ParseState| match state.peek() {
-        Some(Token::StringLiteral(_)) => {
-            if let Token::StringLiteral(s) = state.next().unwrap() {
-                Ok(s)
-            } else {
-                unreachable!()
-            }
-        }
-        Some(tok) => Err(ParseError::new(format!("expected string, got {:?}", tok))),
-        None => Err(ParseError::new("expected string, got end of input")),
-    })
-}
-
 /// Parse zero or more occurrences
 pub fn many<T: 'static>(parser: BoxedParser<T>) -> BoxedParser<Vec<T>> {
     BoxedParser::new(move |state: &mut ParseState| {
@@ -242,6 +199,7 @@ pub fn many<T: 'static>(parser: BoxedParser<T>) -> BoxedParser<Vec<T>> {
 }
 
 /// Parse one or more occurrences
+#[allow(dead_code)]
 pub fn many1<T: 'static>(parser: BoxedParser<T>) -> BoxedParser<Vec<T>> {
     BoxedParser::new(move |state: &mut ParseState| {
         let first = parser.parse(state)?;
