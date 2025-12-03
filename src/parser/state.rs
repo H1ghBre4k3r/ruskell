@@ -81,6 +81,7 @@ pub struct ParseState {
     tokens: Vec<Token>,
     index: usize,
     furthest_error: Option<(usize, ParseError)>,
+    collected_errors: Vec<ParseError>,
 }
 
 impl ParseState {
@@ -89,6 +90,7 @@ impl ParseState {
             tokens,
             index: 0,
             furthest_error: None,
+            collected_errors: Vec::new(),
         }
     }
 
@@ -139,6 +141,39 @@ impl ParseState {
     /// Get the furthest error encountered during parsing
     pub fn get_furthest_error(&self) -> Option<&ParseError> {
         self.furthest_error.as_ref().map(|(_, e)| e)
+    }
+
+    /// Collect an error for later reporting (used during error recovery)
+    pub fn collect_error(&mut self, error: ParseError) {
+        self.collected_errors.push(error);
+    }
+
+    /// Take the furthest error and add it to collected errors, then reset furthest tracking
+    pub fn commit_furthest_error(&mut self) {
+        if let Some((_, err)) = self.furthest_error.take() {
+            self.collected_errors.push(err);
+        }
+    }
+
+    /// Get all collected errors
+    pub fn get_errors(&self) -> &[ParseError] {
+        &self.collected_errors
+    }
+
+    /// Check if any errors were collected
+    pub fn has_errors(&self) -> bool {
+        !self.collected_errors.is_empty()
+    }
+
+    /// Skip tokens until the predicate returns true or end of input
+    #[allow(dead_code)]
+    pub fn skip_until<F: Fn(&Token) -> bool>(&mut self, predicate: F) {
+        while let Some(tok) = self.peek() {
+            if predicate(tok) {
+                break;
+            }
+            self.advance();
+        }
     }
 
     /// Create an error at the current position with span info

@@ -11,6 +11,7 @@ mod statement;
 
 use crate::ast::expression::{Lambda, LambdaBody};
 use crate::ast::{Function, Program};
+use crate::lexer::Token;
 
 use super::combinators::{BoxedParser, expect_do, expect_end, expect_equals, many};
 use super::state::{ParseError, ParseResult, ParseState, Parser};
@@ -39,10 +40,60 @@ pub fn function() -> BoxedParser<Function<()>> {
     })
 }
 
+/// Check if we're at the start of a function definition (ident followed by '=')
+fn at_function_start(state: &ParseState) -> bool {
+    matches!(state.peek(), Some(Token::Ident(_)))
+}
+
+/// Skip tokens until we reach what looks like a new function definition or end of input
+fn skip_to_next_function(state: &mut ParseState) {
+    // Skip current token first to make progress
+    state.advance();
+
+    // Skip until we see an identifier (potential function name) at "top level"
+    // We track brace depth to avoid stopping inside nested structures
+    let mut depth = 0;
+    while let Some(tok) = state.peek() {
+        match tok {
+            Token::Do(_) => {
+                depth += 1;
+                state.advance();
+            }
+            Token::End(_) => {
+                if depth > 0 {
+                    depth -= 1;
+                }
+                state.advance();
+            }
+            Token::Ident(_) if depth == 0 => {
+                // Potential function start - stop here
+                break;
+            }
+            _ => {
+                state.advance();
+            }
+        }
+    }
+}
+
 /// program := function*
+/// With error recovery: if a function fails to parse, skip to the next one
 pub fn program() -> BoxedParser<Program<()>> {
     BoxedParser::new(move |state: &mut ParseState| {
-        let functions = many(function()).parse(state)?;
+        let mut functions = Vec::new();
+
+        while state.has_next() && at_function_start(state) {
+            let pos = state.position();
+            match function().parse(state) {
+                Ok(f) => functions.push(f),
+                Err(_) => {
+                    // Commit the error and try to recover
+                    state.commit_furthest_error();
+                    state.restore(pos);
+                    skip_to_next_function(state);
+                }
+            }
+        }
 
         let main = functions.iter().find(|f| f.name.value == "main").cloned();
 
@@ -69,29 +120,35 @@ pub fn program() -> BoxedParser<Program<()>> {
 
 /// Parse a complete program from the token stream
 pub fn parse(state: &mut ParseState) -> ParseResult<Program<()>> {
-    match program().parse(state) {
-        Ok(prog) => {
-            // Check if all input was consumed
-            if state.has_next() {
-                // There's leftover input - return the furthest error which explains why
-                // parsing stopped, or create a generic error
-                if let Some(furthest) = state.get_furthest_error() {
-                    Err(furthest.clone())
-                } else {
-                    let err = state.error_here("unexpected token");
-                    Err(err)
-                }
-            } else {
-                Ok(prog)
-            }
-        }
-        Err(err) => {
-            // Return the furthest error if available, as it's usually more informative
+    let result = program().parse(state);
+
+    // Check for unconsumed input
+    let result = match result {
+        Ok(prog) if state.has_next() => {
             if let Some(furthest) = state.get_furthest_error() {
-                Err(furthest.clone())
+                state.collect_error(furthest.clone());
             } else {
-                Err(err)
+                let err = state.error_here("unexpected token");
+                state.collect_error(err);
             }
+            Ok(prog) // Still return the program if we got one
         }
+        Ok(prog) => Ok(prog),
+        Err(err) => {
+            if let Some(furthest) = state.get_furthest_error() {
+                state.collect_error(furthest.clone());
+            } else {
+                state.collect_error(err.clone());
+            }
+            Err(err)
+        }
+    };
+
+    // If we collected errors, return the first one (but all are available via state.get_errors())
+    if state.has_errors() {
+        let errors = state.get_errors();
+        Err(errors[0].clone())
+    } else {
+        result
     }
 }
