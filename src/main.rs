@@ -20,7 +20,7 @@ main = do
 end
 
 foo = do 
-    fn := \x => \y => \z do 
+    fn := \x => \y => \z => do 
 
     end
 end

@@ -70,7 +70,21 @@ pub fn program() -> BoxedParser<Program<()>> {
 /// Parse a complete program from the token stream
 pub fn parse(state: &mut ParseState) -> ParseResult<Program<()>> {
     match program().parse(state) {
-        Ok(prog) => Ok(prog),
+        Ok(prog) => {
+            // Check if all input was consumed
+            if state.has_next() {
+                // There's leftover input - return the furthest error which explains why
+                // parsing stopped, or create a generic error
+                if let Some(furthest) = state.get_furthest_error() {
+                    Err(furthest.clone())
+                } else {
+                    let err = state.error_here("unexpected token");
+                    Err(err)
+                }
+            } else {
+                Ok(prog)
+            }
+        }
         Err(err) => {
             // Return the furthest error if available, as it's usually more informative
             if let Some(furthest) = state.get_furthest_error() {
