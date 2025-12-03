@@ -9,10 +9,10 @@ use crate::parser::state::{ParseError, ParseState, Parser};
 /// Parse a unit literal: "()"
 pub fn unit() -> BoxedParser<Unit<()>> {
     BoxedParser::new(move |state: &mut ParseState| {
-        let start = expect_lparen().parse(state)?.pos();
-        let end = expect_rparen().parse(state)?.pos();
+        let start = expect_lparen().parse(state)?;
+        let end = expect_rparen().parse(state)?;
         Ok(Unit {
-            position: start.merge(&end),
+            position: start.pos().merge(&end.pos()),
             info: (),
         })
     })
@@ -32,11 +32,19 @@ pub fn ident() -> BoxedParser<Ident<()>> {
                 unreachable!()
             }
         }
-        Some(tok) => Err(ParseError::new(format!(
-            "expected identifier, got {:?}",
-            tok
-        ))),
-        None => Err(ParseError::new("expected identifier, got end of input")),
+        Some(tok) => {
+            let err = ParseError::new("unexpected token")
+                .expected("identifier")
+                .found(tok.describe())
+                .at(tok.pos());
+            state.record_error(err.clone());
+            Err(err)
+        }
+        None => {
+            let err = ParseError::new("unexpected end of input").expected("identifier");
+            state.record_error(err.clone());
+            Err(err)
+        }
     })
 }
 
@@ -54,8 +62,19 @@ pub fn integer() -> BoxedParser<Integer<()>> {
                 unreachable!()
             }
         }
-        Some(tok) => Err(ParseError::new(format!("expected integer, got {:?}", tok))),
-        None => Err(ParseError::new("expected integer, got end of input")),
+        Some(tok) => {
+            let err = ParseError::new("unexpected token")
+                .expected("integer")
+                .found(tok.describe())
+                .at(tok.pos());
+            state.record_error(err.clone());
+            Err(err)
+        }
+        None => {
+            let err = ParseError::new("unexpected end of input").expected("integer");
+            state.record_error(err.clone());
+            Err(err)
+        }
     })
 }
 
@@ -73,7 +92,18 @@ pub fn string_literal() -> BoxedParser<StringLiteral<()>> {
                 unreachable!()
             }
         }
-        Some(tok) => Err(ParseError::new(format!("expected string, got {:?}", tok))),
-        None => Err(ParseError::new("expected string, got end of input")),
+        Some(tok) => {
+            let err = ParseError::new("unexpected token")
+                .expected("string")
+                .found(tok.describe())
+                .at(tok.pos());
+            state.record_error(err.clone());
+            Err(err)
+        }
+        None => {
+            let err = ParseError::new("unexpected end of input").expected("string");
+            state.record_error(err.clone());
+            Err(err)
+        }
     })
 }
