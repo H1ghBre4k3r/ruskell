@@ -6,7 +6,11 @@ use ruskell::parser::{ParseState, parse};
 fn parse_program(input: &str) -> ruskell::ParsedProgram {
     let tokens = Token::lex(input).expect("lexing failed");
     let mut state = ParseState::new(tokens);
-    parse(&mut state).expect("parsing failed")
+    let (program, errors) = parse(&mut state);
+    if !errors.is_empty() {
+        panic!("parsing failed: {}", errors[0]);
+    }
+    program.expect("parsing failed: no program")
 }
 
 #[test]

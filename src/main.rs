@@ -30,17 +30,30 @@ fn main() -> anyhow::Result<()> {
     let lexed = Token::lex(INPUT)?;
     let mut state = ParseState::new(lexed);
 
-    let program = match parse(&mut state) {
-        Ok(program) => program,
-        Err(e) => {
-            println!("{e}");
-            process::exit(-1);
+    let (program, errors) = parse(&mut state);
+
+    // Print all errors
+    if !errors.is_empty() {
+        eprintln!("Found {} error(s):\n", errors.len());
+        for error in &errors {
+            eprintln!("{error}\n");
         }
-    };
+    }
 
-    println!("{program:#?}");
-
-    interpreter::run(program);
+    // Run if we have a valid program
+    match program {
+        Some(prog) if errors.is_empty() => {
+            println!("{prog:#?}");
+            interpreter::run(prog);
+        }
+        Some(_) => {
+            // Had errors but recovered enough to find main
+            process::exit(1);
+        }
+        None => {
+            process::exit(1);
+        }
+    }
 
     Ok(())
 }

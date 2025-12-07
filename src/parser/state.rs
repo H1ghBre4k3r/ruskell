@@ -160,6 +160,11 @@ impl ParseState {
         &self.collected_errors
     }
 
+    /// Take all collected errors, leaving the list empty
+    pub fn take_errors(&mut self) -> Vec<ParseError> {
+        std::mem::take(&mut self.collected_errors)
+    }
+
     /// Check if any errors were collected
     pub fn has_errors(&self) -> bool {
         !self.collected_errors.is_empty()

@@ -8,7 +8,11 @@ use ruskell::parser::{ParseState, parse};
 fn run_program(input: &str) -> RValue<()> {
     let tokens = Token::lex(input).expect("lexing failed");
     let mut state = ParseState::new(tokens);
-    let program = parse(&mut state).expect("parsing failed");
+    let (program, errors) = parse(&mut state);
+    if !errors.is_empty() {
+        panic!("parsing failed: {}", errors[0]);
+    }
+    let program = program.expect("parsing failed: no program");
 
     let mut scope = Scope::new(program.functions);
     program.main.lambda.run(&[], &mut scope)

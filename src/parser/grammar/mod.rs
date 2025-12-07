@@ -14,7 +14,7 @@ use crate::ast::{Function, Program};
 use crate::lexer::Token;
 
 use super::combinators::{BoxedParser, expect_do, expect_end, expect_equals, many};
-use super::state::{ParseError, ParseResult, ParseState, Parser};
+use super::state::{ParseError, ParseState, Parser};
 
 use literal::ident;
 use statement::statement;
@@ -119,11 +119,12 @@ pub fn program() -> BoxedParser<Program<()>> {
 }
 
 /// Parse a complete program from the token stream
-pub fn parse(state: &mut ParseState) -> ParseResult<Program<()>> {
+/// Returns the parsed program (if main was found) along with all collected errors
+pub fn parse(state: &mut ParseState) -> (Option<Program<()>>, Vec<ParseError>) {
     let result = program().parse(state);
 
     // Check for unconsumed input
-    let result = match result {
+    let program = match result {
         Ok(prog) if state.has_next() => {
             if let Some(furthest) = state.get_furthest_error() {
                 state.collect_error(furthest.clone());
@@ -131,24 +132,19 @@ pub fn parse(state: &mut ParseState) -> ParseResult<Program<()>> {
                 let err = state.error_here("unexpected token");
                 state.collect_error(err);
             }
-            Ok(prog) // Still return the program if we got one
+            Some(prog)
         }
-        Ok(prog) => Ok(prog),
+        Ok(prog) => Some(prog),
         Err(err) => {
             if let Some(furthest) = state.get_furthest_error() {
                 state.collect_error(furthest.clone());
             } else {
-                state.collect_error(err.clone());
+                state.collect_error(err);
             }
-            Err(err)
+            None
         }
     };
 
-    // If we collected errors, return the first one (but all are available via state.get_errors())
-    if state.has_errors() {
-        let errors = state.get_errors();
-        Err(errors[0].clone())
-    } else {
-        result
-    }
+    let errors = state.take_errors();
+    (program, errors)
 }
