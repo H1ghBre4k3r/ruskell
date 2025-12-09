@@ -4,6 +4,8 @@
 //! Ruskell programs.
 
 pub mod ast;
+pub mod core;
+pub mod desugar;
 pub mod interpreter;
 pub mod lexer;
 pub mod parser;
