@@ -3,4 +3,4 @@ mod grammar;
 mod state;
 
 pub use grammar::parse;
-pub use state::*;
+pub use state::ParseState;

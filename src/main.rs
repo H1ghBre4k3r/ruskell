@@ -3,6 +3,8 @@ mod interpreter;
 mod lexer;
 mod parser;
 
+use std::process;
+
 use lexer::Token;
 use parser::{ParseState, parse};
 
@@ -16,17 +18,42 @@ main = do
     z := double(y)
     z
 end
+
+foo = do 
+    fn := \x => \y => \z => do 
+
+    end
+end
 "#;
 
 fn main() -> anyhow::Result<()> {
     let lexed = Token::lex(INPUT)?;
     let mut state = ParseState::new(lexed);
 
-    let program = parse(&mut state).expect("failed to parse program");
+    let (program, errors) = parse(&mut state);
 
-    println!("{program:#?}");
+    // Print all errors
+    if !errors.is_empty() {
+        eprintln!("Found {} error(s):\n", errors.len());
+        for error in &errors {
+            eprintln!("{error}\n");
+        }
+    }
 
-    interpreter::run(program);
+    // Run if we have a valid program
+    match program {
+        Some(prog) if errors.is_empty() => {
+            println!("{prog:#?}");
+            interpreter::run(prog);
+        }
+        Some(_) => {
+            // Had errors but recovered enough to find main
+            process::exit(1);
+        }
+        None => {
+            process::exit(1);
+        }
+    }
 
     Ok(())
 }

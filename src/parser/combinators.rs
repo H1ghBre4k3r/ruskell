@@ -79,9 +79,23 @@ impl<T: 'static> BoxedParser<T> {
             match self.parse(state) {
                 Ok(a) => Ok(a),
                 Err(_) => {
+                    // Error is already recorded in state by the parser
                     state.restore(pos);
                     other.parse(state)
                 }
+            }
+        })
+    }
+
+    /// Add a label to this parser for better error messages
+    pub fn label(self, name: &'static str) -> BoxedParser<T> {
+        BoxedParser::new(move |state: &mut ParseState| match self.parse(state) {
+            Ok(v) => Ok(v),
+            Err(mut err) => {
+                // Replace expected with our label
+                err.expected = vec![name.to_string()];
+                state.record_error(err.clone());
+                Err(err)
             }
         })
     }
@@ -136,48 +150,63 @@ impl<T: 'static, U: 'static, F: Fn(T) -> U + 'static> Shr<F> for BoxedParser<T> 
 
 // === Primitive Parsers ===
 
-pub fn token<F: Fn(&Token) -> bool + 'static>(predicate: F) -> BoxedParser<Token> {
+/// Low-level token parser with custom error - for internal use
+fn token_with_error<F: Fn(&Token) -> bool + 'static>(
+    predicate: F,
+    expected: &'static str,
+) -> BoxedParser<Token> {
     BoxedParser::new(move |state: &mut ParseState| match state.peek() {
         Some(tok) if predicate(tok) => Ok(state.advance().unwrap()),
-        Some(tok) => Err(ParseError::new(format!("unexpected token: {:?}", tok))),
-        None => Err(ParseError::new("unexpected end of input")),
+        Some(tok) => {
+            let err = ParseError::new("unexpected token")
+                .expected(expected)
+                .found(tok.describe())
+                .at(tok.pos());
+            state.record_error(err.clone());
+            Err(err)
+        }
+        None => {
+            let err = ParseError::new("unexpected end of input").expected(expected);
+            state.record_error(err.clone());
+            Err(err)
+        }
     })
 }
 
 pub fn expect_do() -> BoxedParser<Token> {
-    token(|t| matches!(t, Token::Do(_)))
+    token_with_error(|t| matches!(t, Token::Do(_)), "'do'")
 }
 
 pub fn expect_end() -> BoxedParser<Token> {
-    token(|t| matches!(t, Token::End(_)))
+    token_with_error(|t| matches!(t, Token::End(_)), "'end'")
 }
 
 pub fn expect_equals() -> BoxedParser<Token> {
-    token(|t| matches!(t, Token::Equals(_)))
+    token_with_error(|t| matches!(t, Token::Equals(_)), "'='")
 }
 
 pub fn expect_assign() -> BoxedParser<Token> {
-    token(|t| matches!(t, Token::Assign(_)))
+    token_with_error(|t| matches!(t, Token::Assign(_)), "':='")
 }
 
 pub fn expect_backslash() -> BoxedParser<Token> {
-    token(|t| matches!(t, Token::Backslash(_)))
+    token_with_error(|t| matches!(t, Token::Backslash(_)), "'\\'")
 }
 
 pub fn expect_arrow() -> BoxedParser<Token> {
-    token(|t| matches!(t, Token::Arrow(_)))
+    token_with_error(|t| matches!(t, Token::Arrow(_)), "'=>'")
 }
 
 pub fn expect_comma() -> BoxedParser<Token> {
-    token(|t| matches!(t, Token::Comma(_)))
+    token_with_error(|t| matches!(t, Token::Comma(_)), "','")
 }
 
 pub fn expect_lparen() -> BoxedParser<Token> {
-    token(|t| matches!(t, Token::LParen(_)))
+    token_with_error(|t| matches!(t, Token::LParen(_)), "'('")
 }
 
 pub fn expect_rparen() -> BoxedParser<Token> {
-    token(|t| matches!(t, Token::RParen(_)))
+    token_with_error(|t| matches!(t, Token::RParen(_)), "')'")
 }
 
 /// Parse zero or more occurrences

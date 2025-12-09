@@ -51,4 +51,24 @@ impl Token {
             Token::RParen(inner) => inner.position.clone(),
         }
     }
+
+    /// Returns a human-readable description of the token
+    pub fn describe(&self) -> String {
+        match self {
+            Token::Do(_) => "'do'".to_string(),
+            Token::End(_) => "'end'".to_string(),
+            Token::Ident(inner) => format!("identifier '{}'", inner.value),
+            Token::Integer(inner) => format!("integer '{}'", inner.value),
+            Token::StringLiteral(inner) => format!("string {}", inner.value),
+            Token::Equals(_) => "'='".to_string(),
+            Token::Colon(_) => "':'".to_string(),
+            Token::DoubleColon(_) => "'::'".to_string(),
+            Token::Assign(_) => "':='".to_string(),
+            Token::Backslash(_) => "'\\'".to_string(),
+            Token::Arrow(_) => "'=>'".to_string(),
+            Token::Comma(_) => "','".to_string(),
+            Token::LParen(_) => "'('".to_string(),
+            Token::RParen(_) => "')'".to_string(),
+        }
+    }
 }
