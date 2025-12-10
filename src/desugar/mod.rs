@@ -4,6 +4,10 @@
 //! - Multi-parameter lambdas → nested single-parameter lambdas
 //! - Multi-argument function calls → nested single-argument calls
 
+mod erase;
+
+pub use erase::erase_program;
+
 use crate::ast;
 use crate::core::*;
 

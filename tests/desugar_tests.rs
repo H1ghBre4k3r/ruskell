@@ -1,7 +1,7 @@
 //! Tests for desugaring transformations
 
 use ruskell::core::*;
-use ruskell::desugar::desugar_program;
+use ruskell::desugar::{desugar_program, erase_program};
 use ruskell::lexer::Token;
 use ruskell::parser::{ParseState, parse};
 
@@ -14,6 +14,26 @@ fn desugar_test(input: &str) -> CoreProgram<()> {
     }
     let program = program.expect("no program");
     desugar_program(program)
+}
+
+#[test]
+fn desugar_and_erase_roundtrip() {
+    // Test that desugar + erase can round-trip a simple program
+    let input = "main = do f := \\x, y => x\nresult := f(1, 2)\nresult end";
+    let tokens = Token::lex(input).expect("lexing failed");
+    let mut state = ParseState::new(tokens);
+    let (program, errors) = parse(&mut state);
+    assert!(errors.is_empty());
+    let program = program.expect("no program");
+
+    // Desugar
+    let desugared = desugar_program(program);
+
+    // Erase back
+    let erased = erase_program(desugared);
+
+    // Should have main with the right structure
+    assert_eq!(erased.main.name.value, "main");
 }
 
 #[test]
