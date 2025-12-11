@@ -9,6 +9,7 @@ pub mod desugar;
 pub mod interpreter;
 pub mod lexer;
 pub mod parser;
+pub mod types;
 
 /// Type alias for a parsed program with no additional type information
 pub type ParsedProgram = ast::Program<()>;
