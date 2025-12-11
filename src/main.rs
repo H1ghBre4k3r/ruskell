@@ -1,10 +1,13 @@
 mod ast;
+mod core;
+mod desugar;
 mod interpreter;
 mod lexer;
 mod parser;
 
 use std::process;
 
+use desugar::desugar_program;
 use lexer::Token;
 use parser::{ParseState, parse};
 
@@ -43,8 +46,11 @@ fn main() -> anyhow::Result<()> {
     // Run if we have a valid program
     match program {
         Some(prog) if errors.is_empty() => {
-            println!("{prog:#?}");
-            interpreter::run(prog);
+            // Desugar the program
+            let desugared = desugar_program(prog);
+
+            println!("Running program...\n");
+            interpreter::run(desugared);
         }
         Some(_) => {
             // Had errors but recovered enough to find main
