@@ -1,5 +1,6 @@
 //! End-to-end integration tests for complete program execution
 
+use ruskell::desugar::desugar_program;
 use ruskell::interpreter::{RValue, Scope};
 use ruskell::lexer::Token;
 use ruskell::parser::{ParseState, parse};
@@ -14,8 +15,11 @@ fn run_program(input: &str) -> RValue<()> {
     }
     let program = program.expect("parsing failed: no program");
 
-    let mut scope = Scope::new(program.functions);
-    program.main.lambda.run(&[], &mut scope)
+    // Desugar to core AST
+    let core_program = desugar_program(program);
+
+    let mut scope = Scope::new(core_program.functions);
+    core_program.main.lambda.run(RValue::Unit, &mut scope)
 }
 
 #[test]
@@ -211,7 +215,7 @@ fn e2e_return_lambda() {
         end
     "#,
     );
-    assert!(matches!(result, RValue::Lambda(_)));
+    assert!(matches!(result, RValue::CoreLambda(_)));
 }
 
 // Note: Full closure support (capturing environment at creation time) is not yet implemented.

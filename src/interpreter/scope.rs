@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use crate::ast::Function;
 use crate::core::CoreFunction;
 
 use super::value::RValue;
@@ -16,20 +15,8 @@ impl<T> Scope<T>
 where
     T: Clone,
 {
-    /// Create a new scope with top-level functions pre-loaded (Surface AST)
-    pub fn new(functions: Vec<Function<T>>) -> Self {
-        Self {
-            frames: vec![
-                functions
-                    .into_iter()
-                    .map(|func| (func.name.value.clone(), RValue::Lambda(func.lambda)))
-                    .collect::<HashMap<_, _>>(),
-            ],
-        }
-    }
-
-    /// Create a new scope with top-level functions pre-loaded (Core AST)
-    pub fn new_core(functions: Vec<CoreFunction<T>>) -> Self {
+    /// Create a new scope with top-level functions pre-loaded
+    pub fn new(functions: Vec<CoreFunction<T>>) -> Self {
         Self {
             frames: vec![
                 functions

@@ -7,7 +7,7 @@ mod parser;
 
 use std::process;
 
-use desugar::{desugar_program, erase_program};
+use desugar::desugar_program;
 use lexer::Token;
 use parser::{ParseState, parse};
 
@@ -50,7 +50,7 @@ fn main() -> anyhow::Result<()> {
             let desugared = desugar_program(prog);
 
             println!("Running program...\n");
-            interpreter::run_core(desugared);
+            interpreter::run(desugared);
         }
         Some(_) => {
             // Had errors but recovered enough to find main
