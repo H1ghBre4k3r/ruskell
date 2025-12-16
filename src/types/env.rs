@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use super::subst::Substitution;
-use super::ty::{Type, TypeScheme, TypeVar};
+use super::ty::{TypeScheme, TypeVar};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeEnv {
@@ -99,6 +99,7 @@ impl TypeEnv {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::Type;
 
     #[test]
     fn test_empty_env() {

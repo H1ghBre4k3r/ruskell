@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use super::ty::{Type, TypeVar};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Substitution(HashMap<TypeVar, Type>);
+pub struct Substitution(pub HashMap<TypeVar, Type>);
 
 impl Substitution {
     pub fn empty() -> Self {
