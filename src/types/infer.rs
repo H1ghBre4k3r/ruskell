@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use lachs::Span;
+
 use super::env::TypeEnv;
 use super::subst::Substitution;
 use super::ty::{Type, TypeScheme, TypeVar};
