@@ -9,26 +9,111 @@ use crate::core::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeError {
-    UnboundVariable { name: String },
-    Unification(UnifyError),
+    UnboundVariable {
+        name: String,
+        span: Span,
+    },
+    TypeMismatch {
+        expected: Type,
+        found: Type,
+        span: Span,
+        context: Option<String>,
+    },
+    OccursCheck {
+        var: TypeVar,
+        ty: Type,
+        span: Span,
+    },
+}
+
+impl TypeError {
+    pub fn unbound_variable(name: String, span: Span) -> Self {
+        TypeError::UnboundVariable { name, span }
+    }
+
+    pub fn type_mismatch(expected: Type, found: Type, span: Span) -> Self {
+        TypeError::TypeMismatch {
+            expected,
+            found,
+            span,
+            context: None,
+        }
+    }
+
+    pub fn with_context(mut self, context: String) -> Self {
+        if let TypeError::TypeMismatch { context: ctx, .. } = &mut self {
+            *ctx = Some(context);
+        }
+        self
+    }
+
+    pub fn occurs_check(var: TypeVar, ty: Type, span: Span) -> Self {
+        TypeError::OccursCheck { var, ty, span }
+    }
+
+    pub fn from_unify_error(err: UnifyError, span: Span) -> Self {
+        match err {
+            UnifyError::Mismatch { expected, found } => {
+                TypeError::type_mismatch(expected, found, span)
+            }
+            UnifyError::OccursCheck { var, ty } => TypeError::occurs_check(var, ty, span),
+        }
+    }
 }
 
 impl fmt::Display for TypeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            TypeError::UnboundVariable { name } => {
-                write!(f, "unbound variable: {}", name)
+            TypeError::UnboundVariable { name, span } => {
+                let msg = format!("unbound variable: {}", name);
+                // Check if span has source attached
+                if span.source.is_empty() {
+                    write!(f, "Type error: {}", msg)
+                } else {
+                    write!(f, "{}", span.to_string(&msg))
+                }
             }
-            TypeError::Unification(err) => write!(f, "{}", err),
+            TypeError::TypeMismatch {
+                expected,
+                found,
+                span,
+                context,
+            } => {
+                let msg = format!(
+                    "type mismatch: expected {}, found {}",
+                    expected.pretty(),
+                    found.pretty()
+                );
+                let full_msg = if let Some(ctx) = context {
+                    format!("{}\n  Note: {}", msg, ctx)
+                } else {
+                    msg
+                };
+                // Check if span has source attached
+                if span.source.is_empty() {
+                    write!(f, "Type error: {}", full_msg)
+                } else {
+                    write!(f, "{}", span.to_string(&full_msg))
+                }
+            }
+            TypeError::OccursCheck { var, ty, span } => {
+                let msg = format!(
+                    "cannot construct infinite type: {} = {}",
+                    Type::Var(var.clone()).pretty(),
+                    ty.pretty()
+                );
+                // Check if span has source attached
+                if span.source.is_empty() {
+                    write!(f, "Type error: {}", msg)
+                } else {
+                    write!(f, "{}", span.to_string(&msg))
+                }
+            }
         }
     }
 }
 
-impl From<UnifyError> for TypeError {
-    fn from(err: UnifyError) -> Self {
-        TypeError::Unification(err)
-    }
-}
+impl std::error::Error for TypeError {}
 
 pub struct Infer {
     next_var: usize,
@@ -81,9 +166,10 @@ impl Infer {
                     let ty = self.instantiate(scheme);
                     Ok((Substitution::empty(), ty))
                 }
-                None => Err(TypeError::UnboundVariable {
-                    name: ident.value.clone(),
-                }),
+                None => Err(TypeError::unbound_variable(
+                    ident.value.clone(),
+                    ident.position.clone(),
+                )),
             },
 
             CoreExpr::Lambda(lambda) => self.infer_lambda(env, lambda),
@@ -137,7 +223,8 @@ impl Infer {
         let expected_func_ty = Type::func(arg_ty, result_ty.clone());
 
         let func_ty_subst = s2.apply(&func_ty);
-        let s3 = unify(&func_ty_subst, &expected_func_ty)?;
+        let s3 = unify(&func_ty_subst, &expected_func_ty)
+            .map_err(|e| TypeError::from_unify_error(e, call.position.clone()))?;
 
         let final_subst = s3.compose(&s2).compose(&s1);
         let final_ty = final_subst.apply(&result_ty);
@@ -560,5 +647,82 @@ mod tests {
         let scheme = infer.generalize(&env, &ty);
         assert_eq!(scheme.vars.len(), 1);
         assert!(scheme.vars.contains(&var));
+    }
+
+    // Error message tests
+    #[test]
+    fn test_error_unbound_variable_has_span() {
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty();
+        let span = Span::default();
+        let expr = CoreExpr::Ident(CoreIdent {
+            value: "undefined_var".to_string(),
+            position: span.clone(),
+            info: (),
+        });
+
+        let result = infer.infer_expr(&env, &expr);
+        match result {
+            Err(TypeError::UnboundVariable { name, .. }) => {
+                assert_eq!(name, "undefined_var");
+            }
+            _ => panic!("Expected UnboundVariable error"),
+        }
+    }
+
+    #[test]
+    fn test_error_type_mismatch_display() {
+        let span = Span::default();
+        let err = TypeError::type_mismatch(Type::Int, Type::String, span);
+        let msg = format!("{}", err);
+        assert!(msg.contains("type mismatch"));
+        assert!(msg.contains("Int"));
+        assert!(msg.contains("String"));
+    }
+
+    #[test]
+    fn test_error_with_context() {
+        let span = Span::default();
+        let err = TypeError::type_mismatch(Type::Int, Type::String, span)
+            .with_context("in function application".to_string());
+
+        let msg = format!("{}", err);
+        assert!(msg.contains("type mismatch"));
+        assert!(msg.contains("Note:"));
+        assert!(msg.contains("in function application"));
+    }
+
+    #[test]
+    fn test_error_occurs_check_display() {
+        let span = Span::default();
+        let var = TypeVar::new(0);
+        let ty = Type::func(Type::Var(var.clone()), Type::Int);
+        let err = TypeError::occurs_check(var, ty, span);
+
+        let msg = format!("{}", err);
+        assert!(msg.contains("infinite type"));
+    }
+
+    #[test]
+    fn test_function_call_type_error_has_span() {
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty();
+
+        // Try to call an integer as a function: 42(10)
+        let call_span = Span::default();
+        let call = CoreExpr::FunctionCall(CoreFunctionCall {
+            func: Box::new(int_expr(42)),
+            arg: Box::new(int_expr(10)),
+            position: call_span,
+            info: (),
+        });
+
+        let result = infer.infer_expr(&env, &call);
+        match result {
+            Err(TypeError::TypeMismatch { .. }) => {
+                // Success - we got a type mismatch error
+            }
+            _ => panic!("Expected TypeMismatch error, got: {:?}", result),
+        }
     }
 }
