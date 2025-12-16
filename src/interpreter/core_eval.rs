@@ -23,10 +23,10 @@ where
                     .unwrap_or_else(|| panic!("undefined identifier: {}", ident.value));
                 // If it's a nullary lambda (no params), call it immediately
                 match &value {
-                    RValue::CoreLambda(lambda)
+                    RValue::CoreLambda(lambda, captured)
                         if matches!(lambda.param, CoreLambdaParam::Unit(_)) =>
                     {
-                        lambda.run(RValue::Unit, scope)
+                        lambda.run(RValue::Unit, scope, captured)
                     }
                     _ => value,
                 }
@@ -41,13 +41,17 @@ where
                 position: string.position.clone(),
                 info: string.info.clone(),
             }),
-            CoreExpr::Lambda(lambda) => RValue::CoreLambda(lambda.clone()),
+            CoreExpr::Lambda(lambda) => {
+                // Capture the current environment for the closure
+                let captured = scope.capture();
+                RValue::CoreLambda(lambda.clone(), captured)
+            }
             CoreExpr::FunctionCall(call) => {
                 let func_value = call.func.eval(scope);
                 let arg_value = call.arg.eval(scope);
 
                 match func_value {
-                    RValue::CoreLambda(lambda) => lambda.run(arg_value, scope),
+                    RValue::CoreLambda(lambda, captured) => lambda.run(arg_value, scope, &captured),
                     other => panic!("cannot call non-function value: {:?}", other),
                 }
             }
@@ -75,7 +79,16 @@ impl<T> CoreLambda<T>
 where
     T: Clone + Debug,
 {
-    pub fn run(&self, arg: RValue<T>, scope: &mut Scope<T>) -> RValue<T> {
+    pub fn run(
+        &self,
+        arg: RValue<T>,
+        scope: &mut Scope<T>,
+        captured: &super::value::CapturedEnv<T>,
+    ) -> RValue<T> {
+        // First, restore the captured environment
+        scope.with_captured(captured);
+
+        // Then enter a new scope for the lambda's parameters
         scope.enter();
 
         // Bind the parameter
@@ -103,6 +116,9 @@ where
             }
         };
 
+        // Leave the parameter scope
+        scope.leave();
+        // Leave the captured environment scope
         scope.leave();
         result
     }

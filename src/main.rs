@@ -16,10 +16,10 @@ use types::Infer;
 const INPUT: &str = r#"
 main = do
     cons := \x, y => do
-        x
+        y
     end
-    get := cons(42)
-    z := get(13)
+    y := cons(42) 
+    z := y(17)
     z
 end
 "#;

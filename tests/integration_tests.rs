@@ -1,9 +1,10 @@
 //! End-to-end integration tests for complete program execution
 
 use ruskell::desugar::desugar_program;
-use ruskell::interpreter::{RValue, Scope};
+use ruskell::interpreter::{CapturedEnv, RValue, Scope};
 use ruskell::lexer::Token;
 use ruskell::parser::{ParseState, parse};
+use std::collections::HashMap;
 
 /// Parse and evaluate a program, returning the result of main
 fn run_program(input: &str) -> RValue<()> {
@@ -19,7 +20,11 @@ fn run_program(input: &str) -> RValue<()> {
     let core_program = desugar_program(program);
 
     let mut scope = Scope::new(core_program.functions);
-    core_program.main.lambda.run(RValue::Unit, &mut scope)
+    let empty_capture = CapturedEnv(HashMap::new());
+    core_program
+        .main
+        .lambda
+        .run(RValue::Unit, &mut scope, &empty_capture)
 }
 
 #[test]
@@ -215,7 +220,7 @@ fn e2e_return_lambda() {
         end
     "#,
     );
-    assert!(matches!(result, RValue::CoreLambda(_)));
+    assert!(matches!(result, RValue::CoreLambda(..)));
 }
 
 // Note: Full closure support (capturing environment at creation time) is not yet implemented.
