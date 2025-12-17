@@ -240,3 +240,88 @@ fn e2e_return_lambda() {
 //         panic!("expected integer");
 //     }
 // }
+
+#[test]
+fn e2e_arithmetic_addition() {
+    let result = run_program("main = do 5 + 3 end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 8);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_arithmetic_subtraction() {
+    let result = run_program("main = do 10 - 3 end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 7);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_arithmetic_multiplication() {
+    let result = run_program("main = do 4 * 7 end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 28);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_arithmetic_division() {
+    let result = run_program("main = do 20 / 4 end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 5);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_arithmetic_precedence() {
+    // Tests that * and / have higher precedence than + and -
+    // 2 + 3 * 4 should be 2 + (3 * 4) = 14, not (2 + 3) * 4 = 20
+    let result = run_program("main = do 2 + 3 * 4 end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 14);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_arithmetic_complex() {
+    let result = run_program(
+        r#"
+        main = do
+            x := 10
+            y := 20
+            sum := x + y
+            prod := x * y
+            diff := sum - prod
+            quotient := prod / x
+            quotient
+        end
+    "#,
+    );
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 20);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_arithmetic_parentheses() {
+    // (2 + 3) * 4 = 5 * 4 = 20
+    let result = run_program("main = do (2 + 3) * 4 end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 20);
+    } else {
+        panic!("expected integer");
+    }
+}

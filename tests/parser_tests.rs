@@ -189,3 +189,22 @@ fn parse_multiple_functions() {
     assert_eq!(program.functions.len(), 1);
     assert_eq!(program.functions[0].name.value, "helper");
 }
+
+#[test]
+fn parse_binary_addition() {
+    let program = parse_program("main = do 1 + 2 end");
+    assert_eq!(program.main.name.value, "main");
+}
+
+#[test]
+fn parse_binary_precedence() {
+    // Should parse as 1 + (2 * 3)
+    let program = parse_program("main = do 1 + 2 * 3 end");
+    assert_eq!(program.main.name.value, "main");
+}
+
+#[test]
+fn parse_binary_with_parens() {
+    let program = parse_program("main = do (1 + 2) * 3 end");
+    assert_eq!(program.main.name.value, "main");
+}

@@ -55,6 +55,38 @@ where
                     other => panic!("cannot call non-function value: {:?}", other),
                 }
             }
+            CoreExpr::BinaryOp(binop) => {
+                let left = binop.left.eval(scope);
+                let right = binop.right.eval(scope);
+
+                let left_val = match left {
+                    RValue::Integer(i) => i.value,
+                    _ => panic!("left operand must be integer"),
+                };
+
+                let right_val = match right {
+                    RValue::Integer(i) => i.value,
+                    _ => panic!("right operand must be integer"),
+                };
+
+                let result = match binop.op {
+                    crate::ast::expression::BinOpKind::Add => left_val + right_val,
+                    crate::ast::expression::BinOpKind::Sub => left_val - right_val,
+                    crate::ast::expression::BinOpKind::Mul => left_val * right_val,
+                    crate::ast::expression::BinOpKind::Div => {
+                        if right_val == 0 {
+                            panic!("division by zero");
+                        }
+                        left_val / right_val
+                    }
+                };
+
+                RValue::Integer(crate::ast::expression::Integer {
+                    value: result,
+                    position: binop.position.clone(),
+                    info: binop.info.clone(),
+                })
+            }
         }
     }
 }

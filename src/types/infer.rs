@@ -177,6 +177,8 @@ impl Infer {
             CoreExpr::Lambda(lambda) => self.infer_lambda(env, lambda),
 
             CoreExpr::FunctionCall(call) => self.infer_call(env, call),
+
+            CoreExpr::BinaryOp(binop) => self.infer_binop(env, binop),
         }
     }
 
@@ -232,6 +234,31 @@ impl Infer {
         let final_ty = final_subst.apply(&result_ty);
 
         Ok((final_subst, final_ty))
+    }
+
+    fn infer_binop(
+        &mut self,
+        env: &TypeEnv,
+        binop: &crate::core::CoreBinaryOp<()>,
+    ) -> Result<(Substitution, Type), TypeError> {
+        // All arithmetic operators work on Int -> Int -> Int
+        let (s1, left_ty) = self.infer_expr(env, &binop.left)?;
+        let env1 = env.apply_subst(&s1);
+        let (s2, right_ty) = self.infer_expr(&env1, &binop.right)?;
+
+        // Unify left with Int
+        let left_ty_subst = s2.apply(&left_ty);
+        let s3 = unify(&left_ty_subst, &Type::Int)
+            .map_err(|e| TypeError::from_unify_error(e, binop.position.clone()))?;
+
+        // Unify right with Int
+        let right_ty_subst = s3.apply(&right_ty);
+        let s4 = unify(&right_ty_subst, &Type::Int)
+            .map_err(|e| TypeError::from_unify_error(e, binop.position.clone()))?;
+
+        let final_subst = s4.compose(&s3).compose(&s2).compose(&s1);
+
+        Ok((final_subst, Type::Int))
     }
 
     fn infer_statement(
@@ -726,5 +753,64 @@ mod tests {
             }
             _ => panic!("Expected TypeMismatch error, got: {:?}", result),
         }
+    }
+
+    #[test]
+    fn test_infer_binary_addition() {
+        use crate::ast::expression::BinOpKind;
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty();
+
+        // 5 + 3
+        let binop = CoreExpr::BinaryOp(crate::core::CoreBinaryOp {
+            op: BinOpKind::Add,
+            left: Box::new(int_expr(5)),
+            right: Box::new(int_expr(3)),
+            position: Span::default(),
+            info: (),
+        });
+
+        let (_, ty) = infer.infer_expr(&env, &binop).unwrap();
+        assert_eq!(ty, Type::Int);
+    }
+
+    #[test]
+    fn test_infer_binary_mixed_types_error() {
+        use crate::ast::expression::BinOpKind;
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty();
+
+        // 5 + "hello" should fail
+        let binop = CoreExpr::BinaryOp(crate::core::CoreBinaryOp {
+            op: BinOpKind::Add,
+            left: Box::new(int_expr(5)),
+            right: Box::new(string_expr("hello")),
+            position: Span::default(),
+            info: (),
+        });
+
+        let result = infer.infer_expr(&env, &binop);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_infer_binary_with_variables() {
+        use crate::ast::expression::BinOpKind;
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty()
+            .extend("x".to_string(), TypeScheme::monomorphic(Type::Int))
+            .extend("y".to_string(), TypeScheme::monomorphic(Type::Int));
+
+        // x * y
+        let binop = CoreExpr::BinaryOp(crate::core::CoreBinaryOp {
+            op: BinOpKind::Mul,
+            left: Box::new(ident_expr("x")),
+            right: Box::new(ident_expr("y")),
+            position: Span::default(),
+            info: (),
+        });
+
+        let (_, ty) = infer.infer_expr(&env, &binop).unwrap();
+        assert_eq!(ty, Type::Int);
     }
 }

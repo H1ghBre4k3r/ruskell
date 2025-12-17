@@ -10,6 +10,7 @@ pub enum Expression<T> {
     String(StringLiteral<T>),
     FunctionCall(FunctionCall<T>),
     Lambda(Lambda<T>),
+    BinaryOp(BinaryOp<T>),
 }
 
 #[derive(Debug, Clone)]
@@ -66,4 +67,23 @@ pub struct Lambda<T> {
 pub enum LambdaParam<T> {
     Ident(Ident<T>),
     Unit(Unit<T>),
+}
+
+/// Binary operator kinds
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinOpKind {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+/// Binary operation expression
+#[derive(Debug, Clone)]
+pub struct BinaryOp<T> {
+    pub op: BinOpKind,
+    pub left: Box<Expression<T>>,
+    pub right: Box<Expression<T>>,
+    pub position: Span,
+    pub info: T,
 }

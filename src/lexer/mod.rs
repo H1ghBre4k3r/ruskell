@@ -30,6 +30,14 @@ pub enum Token {
     LParen,
     #[terminal(")")]
     RParen,
+    #[terminal("+")]
+    Plus,
+    #[terminal("-")]
+    Minus,
+    #[terminal("*")]
+    Star,
+    #[terminal("/")]
+    Slash,
 }
 
 impl Token {
@@ -49,6 +57,10 @@ impl Token {
             Token::Comma(inner) => inner.position.clone(),
             Token::LParen(inner) => inner.position.clone(),
             Token::RParen(inner) => inner.position.clone(),
+            Token::Plus(inner) => inner.position.clone(),
+            Token::Minus(inner) => inner.position.clone(),
+            Token::Star(inner) => inner.position.clone(),
+            Token::Slash(inner) => inner.position.clone(),
         }
     }
 
@@ -69,6 +81,10 @@ impl Token {
             Token::Comma(_) => "','".to_string(),
             Token::LParen(_) => "'('".to_string(),
             Token::RParen(_) => "')'".to_string(),
+            Token::Plus(_) => "'+'".to_string(),
+            Token::Minus(_) => "'-'".to_string(),
+            Token::Star(_) => "'*'".to_string(),
+            Token::Slash(_) => "'/'".to_string(),
         }
     }
 }
