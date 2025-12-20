@@ -66,3 +66,62 @@ fn lex_lambda() {
     assert!(matches!(tokens[2], Token::Arrow(_)));
     assert!(matches!(&tokens[3], Token::Ident(i) if i.value == "x"));
 }
+
+// ===== Boolean and Comparison Operator Lexer Tests =====
+
+#[test]
+fn lex_boolean_literals() {
+    let tokens = Token::lex("true false").unwrap();
+    assert_eq!(tokens.len(), 2);
+    assert!(matches!(tokens[0], Token::True(_)));
+    assert!(matches!(tokens[1], Token::False(_)));
+}
+
+#[test]
+fn lex_boolean_not_identifiers() {
+    // Ensure true/false are keywords, not identifiers
+    let tokens = Token::lex("true").unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert!(matches!(tokens[0], Token::True(_)));
+    assert!(!matches!(tokens[0], Token::Ident(_)));
+}
+
+#[test]
+fn lex_comparison_operators() {
+    let tokens = Token::lex("== != < > <= >=").unwrap();
+    assert_eq!(tokens.len(), 6);
+    assert!(matches!(tokens[0], Token::DoubleEquals(_)));
+    assert!(matches!(tokens[1], Token::NotEquals(_)));
+    assert!(matches!(tokens[2], Token::LessThan(_)));
+    assert!(matches!(tokens[3], Token::GreaterThan(_)));
+    assert!(matches!(tokens[4], Token::LessEquals(_)));
+    assert!(matches!(tokens[5], Token::GreaterEquals(_)));
+}
+
+#[test]
+fn lex_comparison_longest_match() {
+    // Test that <= is one token, not < followed by =
+    let tokens = Token::lex("<=").unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert!(matches!(tokens[0], Token::LessEquals(_)));
+
+    // Same for >=
+    let tokens = Token::lex(">=").unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert!(matches!(tokens[0], Token::GreaterEquals(_)));
+
+    // And ==
+    let tokens = Token::lex("==").unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert!(matches!(tokens[0], Token::DoubleEquals(_)));
+}
+
+#[test]
+fn lex_arithmetic_operators() {
+    let tokens = Token::lex("+ - * /").unwrap();
+    assert_eq!(tokens.len(), 4);
+    assert!(matches!(tokens[0], Token::Plus(_)));
+    assert!(matches!(tokens[1], Token::Minus(_)));
+    assert!(matches!(tokens[2], Token::Star(_)));
+    assert!(matches!(tokens[3], Token::Slash(_)));
+}

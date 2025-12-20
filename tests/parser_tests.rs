@@ -354,3 +354,107 @@ fn parse_function_do_block_body() {
     assert_eq!(compute_fn.lambda.params.len(), 2);
     assert!(matches!(compute_fn.lambda.body, LambdaBody::Block(_)));
 }
+
+// ===== Boolean and Comparison Operator Parser Tests =====
+
+#[test]
+fn parse_boolean_true() {
+    let program = parse_program("main = do true end");
+
+    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+        assert_eq!(stmts.len(), 1);
+        if let Statement::Expression(Expression::Boolean(b)) = &stmts[0] {
+            assert!(b.value);
+        } else {
+            panic!("expected boolean expression");
+        }
+    } else {
+        panic!("expected block body");
+    }
+}
+
+#[test]
+fn parse_boolean_false() {
+    let program = parse_program("main = do false end");
+
+    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+        assert_eq!(stmts.len(), 1);
+        if let Statement::Expression(Expression::Boolean(b)) = &stmts[0] {
+            assert!(!b.value);
+        } else {
+            panic!("expected boolean expression");
+        }
+    } else {
+        panic!("expected block body");
+    }
+}
+
+#[test]
+fn parse_comparison_equal() {
+    let program = parse_program("main = do 5 == 10 end");
+
+    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+        assert_eq!(stmts.len(), 1);
+        if let Statement::Expression(Expression::BinaryOp(binop)) = &stmts[0] {
+            assert!(matches!(binop.op, ruskell::ast::expression::BinOpKind::Eq));
+        } else {
+            panic!("expected binary op expression");
+        }
+    } else {
+        panic!("expected block body");
+    }
+}
+
+#[test]
+fn parse_comparison_with_precedence() {
+    // 2 + 3 < 10 should parse with + binding tighter than <
+    let program = parse_program("main = do 2 + 3 < 10 end");
+
+    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+        assert_eq!(stmts.len(), 1);
+        if let Statement::Expression(Expression::BinaryOp(binop)) = &stmts[0] {
+            // The outer operation should be <
+            assert!(matches!(binop.op, ruskell::ast::expression::BinOpKind::Lt));
+            // The left side should be a BinaryOp (2 + 3)
+            if let Expression::BinaryOp(left_binop) = &*binop.left {
+                assert!(matches!(
+                    left_binop.op,
+                    ruskell::ast::expression::BinOpKind::Add
+                ));
+            } else {
+                panic!("expected left side to be binary op");
+            }
+        } else {
+            panic!("expected binary op expression");
+        }
+    } else {
+        panic!("expected block body");
+    }
+}
+
+#[test]
+fn parse_all_comparison_operators() {
+    use ruskell::ast::expression::BinOpKind;
+
+    let tests = vec![
+        ("main = do 1 == 2 end", BinOpKind::Eq),
+        ("main = do 1 != 2 end", BinOpKind::NotEq),
+        ("main = do 1 < 2 end", BinOpKind::Lt),
+        ("main = do 1 > 2 end", BinOpKind::Gt),
+        ("main = do 1 <= 2 end", BinOpKind::LtEq),
+        ("main = do 1 >= 2 end", BinOpKind::GtEq),
+    ];
+
+    for (input, expected_op) in tests {
+        let program = parse_program(input);
+        if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+            if let Statement::Expression(Expression::BinaryOp(binop)) = &stmts[0] {
+                assert_eq!(binop.op, expected_op);
+            } else {
+                panic!("expected binary op for {}", input);
+            }
+        } else {
+            panic!("expected block body");
+        }
+    }
+}

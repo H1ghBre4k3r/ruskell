@@ -398,6 +398,7 @@ impl Default for Infer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::expression::BinOpKind;
 
     // Helper to create test expressions
     fn unit_expr() -> CoreExpr<()> {
@@ -846,5 +847,168 @@ mod tests {
 
         let (_, ty) = infer.infer_expr(&env, &binop).unwrap();
         assert_eq!(ty, Type::Int);
+    }
+
+    // ===== Boolean and Comparison Operator Type Tests =====
+
+    #[test]
+    fn test_infer_boolean_true() {
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty();
+
+        let bool_expr = boolean_expr(true);
+        let (_, ty) = infer.infer_expr(&env, &bool_expr).unwrap();
+        assert_eq!(ty, Type::Bool);
+    }
+
+    #[test]
+    fn test_infer_boolean_false() {
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty();
+
+        let bool_expr = boolean_expr(false);
+        let (_, ty) = infer.infer_expr(&env, &bool_expr).unwrap();
+        assert_eq!(ty, Type::Bool);
+    }
+
+    #[test]
+    fn test_infer_comparison_equal() {
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty();
+
+        let binop = CoreExpr::BinaryOp(CoreBinaryOp {
+            op: BinOpKind::Eq,
+            left: Box::new(int_expr(5)),
+            right: Box::new(int_expr(10)),
+            position: Span::default(),
+            info: (),
+        });
+
+        let (_, ty) = infer.infer_expr(&env, &binop).unwrap();
+        assert_eq!(ty, Type::Bool);
+    }
+
+    #[test]
+    fn test_infer_comparison_less_than() {
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty();
+
+        let binop = CoreExpr::BinaryOp(CoreBinaryOp {
+            op: BinOpKind::Lt,
+            left: Box::new(int_expr(5)),
+            right: Box::new(int_expr(10)),
+            position: Span::default(),
+            info: (),
+        });
+
+        let (_, ty) = infer.infer_expr(&env, &binop).unwrap();
+        assert_eq!(ty, Type::Bool);
+    }
+
+    #[test]
+    fn test_infer_all_comparison_operators() {
+        let ops = vec![
+            BinOpKind::Eq,
+            BinOpKind::NotEq,
+            BinOpKind::Lt,
+            BinOpKind::Gt,
+            BinOpKind::LtEq,
+            BinOpKind::GtEq,
+        ];
+
+        for op in ops {
+            let mut infer = Infer::new();
+            let env = TypeEnv::empty();
+
+            let binop = CoreExpr::BinaryOp(CoreBinaryOp {
+                op,
+                left: Box::new(int_expr(1)),
+                right: Box::new(int_expr(2)),
+                position: Span::default(),
+                info: (),
+            });
+
+            let (_, ty) = infer.infer_expr(&env, &binop).unwrap();
+            assert_eq!(ty, Type::Bool, "Failed for operator: {:?}", op);
+        }
+    }
+
+    #[test]
+    fn test_infer_comparison_with_variables() {
+        let mut infer = Infer::new();
+        let mut env = TypeEnv::empty();
+
+        // Add x: Int and y: Int to environment
+        env = env.extend("x".to_string(), TypeScheme::monomorphic(Type::Int));
+        env = env.extend("y".to_string(), TypeScheme::monomorphic(Type::Int));
+
+        let binop = CoreExpr::BinaryOp(CoreBinaryOp {
+            op: BinOpKind::Lt,
+            left: Box::new(ident_expr("x")),
+            right: Box::new(ident_expr("y")),
+            position: Span::default(),
+            info: (),
+        });
+
+        let (_, ty) = infer.infer_expr(&env, &binop).unwrap();
+        assert_eq!(ty, Type::Bool);
+    }
+
+    #[test]
+    fn test_infer_comparison_type_error() {
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty();
+
+        // Try to compare Int with String
+        let binop = CoreExpr::BinaryOp(CoreBinaryOp {
+            op: BinOpKind::Eq,
+            left: Box::new(int_expr(5)),
+            right: Box::new(string_expr("hello")),
+            position: Span::default(),
+            info: (),
+        });
+
+        let result = infer.infer_expr(&env, &binop);
+        assert!(result.is_err(), "Expected type error");
+    }
+
+    #[test]
+    fn test_infer_boolean_binding() {
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty();
+
+        // result := 5 < 10
+        let assignment = CoreAssignment {
+            name: CoreIdent {
+                value: "result".to_string(),
+                position: Span::default(),
+                info: (),
+            },
+            value: Box::new(CoreExpr::BinaryOp(CoreBinaryOp {
+                op: BinOpKind::Lt,
+                left: Box::new(int_expr(5)),
+                right: Box::new(int_expr(10)),
+                position: Span::default(),
+                info: (),
+            })),
+            position: Span::default(),
+            info: (),
+        };
+
+        let (_, _, new_env) = infer.infer_assignment(&env, &assignment).unwrap();
+
+        // Check that result has type Bool
+        let result_scheme = new_env.lookup("result").unwrap();
+        assert_eq!(result_scheme.ty, Type::Bool);
+    }
+
+    // Helper functions for tests
+
+    fn boolean_expr(value: bool) -> CoreExpr<()> {
+        CoreExpr::Boolean(CoreBoolean {
+            value,
+            position: Span::default(),
+            info: (),
+        })
     }
 }
