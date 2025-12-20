@@ -7,6 +7,8 @@
 
 use lachs::Span;
 
+use crate::ast::expression::BinOpKind;
+
 /// Core expression - simplified for type checking
 #[derive(Debug, Clone, PartialEq)]
 pub enum CoreExpr<T> {
@@ -16,6 +18,7 @@ pub enum CoreExpr<T> {
     String(CoreString<T>),
     Lambda(CoreLambda<T>),
     FunctionCall(CoreFunctionCall<T>),
+    BinaryOp(CoreBinaryOp<T>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -71,6 +74,16 @@ pub enum CoreLambdaBody<T> {
 pub struct CoreFunctionCall<T> {
     pub func: Box<CoreExpr<T>>,
     pub arg: Box<CoreExpr<T>>,
+    pub position: Span,
+    pub info: T,
+}
+
+/// Binary operation
+#[derive(Debug, Clone, PartialEq)]
+pub struct CoreBinaryOp<T> {
+    pub op: BinOpKind,
+    pub left: Box<CoreExpr<T>>,
+    pub right: Box<CoreExpr<T>>,
     pub position: Span,
     pub info: T,
 }

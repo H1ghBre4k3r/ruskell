@@ -1,7 +1,8 @@
 use ruskell::desugar::desugar_program;
-use ruskell::interpreter::{RValue, Scope};
+use ruskell::interpreter::{CapturedEnv, RValue, Scope};
 use ruskell::lexer::Token;
 use ruskell::parser::{ParseState, parse};
+use std::collections::HashMap;
 
 /// Helper to parse and desugar a program for testing
 fn parse_and_desugar(input: &str) -> ruskell::core::CoreProgram<()> {
@@ -19,7 +20,11 @@ fn parse_and_desugar(input: &str) -> ruskell::core::CoreProgram<()> {
 fn eval_program(input: &str) -> RValue<()> {
     let core_program = parse_and_desugar(input);
     let mut scope = Scope::new(core_program.functions);
-    core_program.main.lambda.run(RValue::Unit, &mut scope)
+    let empty_capture = CapturedEnv(HashMap::new());
+    core_program
+        .main
+        .lambda
+        .run(RValue::Unit, &mut scope, &empty_capture)
 }
 
 #[test]
@@ -41,7 +46,7 @@ fn eval_unit_literal() {
 #[test]
 fn eval_lambda_returns_lambda() {
     let result = eval_program("main = do \\x => x end");
-    assert!(matches!(result, RValue::CoreLambda(_)));
+    assert!(matches!(result, RValue::CoreLambda(..)));
 }
 
 #[test]

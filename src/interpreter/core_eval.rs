@@ -17,20 +17,9 @@ where
     pub fn eval(&self, scope: &mut Scope<T>) -> RValue<T> {
         match self {
             CoreExpr::Unit(_) => RValue::Unit,
-            CoreExpr::Ident(ident) => {
-                let value = scope
-                    .resolve(&ident.value)
-                    .unwrap_or_else(|| panic!("undefined identifier: {}", ident.value));
-                // If it's a nullary lambda (no params), call it immediately
-                match &value {
-                    RValue::CoreLambda(lambda)
-                        if matches!(lambda.param, CoreLambdaParam::Unit(_)) =>
-                    {
-                        lambda.run(RValue::Unit, scope)
-                    }
-                    _ => value,
-                }
-            }
+            CoreExpr::Ident(ident) => scope
+                .resolve(&ident.value)
+                .unwrap_or_else(|| panic!("undefined identifier: {}", ident.value)),
             CoreExpr::Integer(integer) => RValue::Integer(crate::ast::expression::Integer {
                 value: integer.value,
                 position: integer.position.clone(),
@@ -41,15 +30,51 @@ where
                 position: string.position.clone(),
                 info: string.info.clone(),
             }),
-            CoreExpr::Lambda(lambda) => RValue::CoreLambda(lambda.clone()),
+            CoreExpr::Lambda(lambda) => {
+                // Capture the current environment for the closure
+                let captured = scope.capture();
+                RValue::CoreLambda(lambda.clone(), captured)
+            }
             CoreExpr::FunctionCall(call) => {
                 let func_value = call.func.eval(scope);
                 let arg_value = call.arg.eval(scope);
 
                 match func_value {
-                    RValue::CoreLambda(lambda) => lambda.run(arg_value, scope),
+                    RValue::CoreLambda(lambda, captured) => lambda.run(arg_value, scope, &captured),
                     other => panic!("cannot call non-function value: {:?}", other),
                 }
+            }
+            CoreExpr::BinaryOp(binop) => {
+                let left = binop.left.eval(scope);
+                let right = binop.right.eval(scope);
+
+                let left_val = match left {
+                    RValue::Integer(i) => i.value,
+                    _ => panic!("left operand must be integer"),
+                };
+
+                let right_val = match right {
+                    RValue::Integer(i) => i.value,
+                    _ => panic!("right operand must be integer"),
+                };
+
+                let result = match binop.op {
+                    crate::ast::expression::BinOpKind::Add => left_val + right_val,
+                    crate::ast::expression::BinOpKind::Sub => left_val - right_val,
+                    crate::ast::expression::BinOpKind::Mul => left_val * right_val,
+                    crate::ast::expression::BinOpKind::Div => {
+                        if right_val == 0 {
+                            panic!("division by zero");
+                        }
+                        left_val / right_val
+                    }
+                };
+
+                RValue::Integer(crate::ast::expression::Integer {
+                    value: result,
+                    position: binop.position.clone(),
+                    info: binop.info.clone(),
+                })
             }
         }
     }
@@ -75,7 +100,16 @@ impl<T> CoreLambda<T>
 where
     T: Clone + Debug,
 {
-    pub fn run(&self, arg: RValue<T>, scope: &mut Scope<T>) -> RValue<T> {
+    pub fn run(
+        &self,
+        arg: RValue<T>,
+        scope: &mut Scope<T>,
+        captured: &super::value::CapturedEnv<T>,
+    ) -> RValue<T> {
+        // First, restore the captured environment
+        scope.with_captured(captured);
+
+        // Then enter a new scope for the lambda's parameters
         scope.enter();
 
         // Bind the parameter
@@ -103,6 +137,9 @@ where
             }
         };
 
+        // Leave the parameter scope
+        scope.leave();
+        // Leave the captured environment scope
         scope.leave();
         result
     }

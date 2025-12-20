@@ -77,6 +77,13 @@ fn erase_expr(expr: CoreExpr<()>) -> ast::expression::Expression<()> {
             position: call.position,
             info: (),
         }),
+        CoreExpr::BinaryOp(binop) => Expression::BinaryOp(ast::expression::BinaryOp {
+            op: binop.op,
+            left: Box::new(erase_expr(*binop.left)),
+            right: Box::new(erase_expr(*binop.right)),
+            position: binop.position,
+            info: (),
+        }),
     }
 }
 

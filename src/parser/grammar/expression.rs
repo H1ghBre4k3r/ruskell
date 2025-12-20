@@ -1,6 +1,9 @@
 //! Expression parsers for the Ruskell language
 
-use crate::ast::expression::{Expression, FunctionCall, Lambda, LambdaBody, LambdaParam};
+use crate::ast::expression::{
+    BinOpKind, BinaryOp, Expression, FunctionCall, Lambda, LambdaBody, LambdaParam,
+};
+use crate::lexer::Token;
 
 use crate::parser::combinators::{
     BoxedParser, expect_arrow, expect_backslash, expect_comma, expect_do, expect_end,
@@ -172,6 +175,35 @@ pub fn expression() -> BoxedParser<Expression<()>> {
         }
         state.restore(pos);
 
+        // Try additive expression (handles all binary ops)
+        additive_expr().parse(state)
+    })
+}
+
+/// primary := function_call | singular | "(" expression ")"
+fn primary_expr() -> BoxedParser<Expression<()>> {
+    BoxedParser::new(move |state: &mut ParseState| {
+        let pos = state.position();
+
+        // Try parenthesized expression or unit literal
+        if let Ok(start) = expect_lparen().parse(state) {
+            // Check for unit literal ()
+            let inner_pos = state.position();
+            if let Ok(end) = expect_rparen().parse(state) {
+                return Ok(Expression::Unit(crate::ast::expression::Unit {
+                    position: start.pos().merge(&end.pos()),
+                    info: (),
+                }));
+            }
+            state.restore(inner_pos);
+
+            // Otherwise it's a parenthesized expression
+            let expr = expression().parse(state)?;
+            expect_rparen().parse(state)?;
+            return Ok(expr);
+        }
+        state.restore(pos);
+
         // Try function call (ident followed by args)
         if let Ok(expr) = function_call().parse(state) {
             return Ok(expr);
@@ -180,5 +212,109 @@ pub fn expression() -> BoxedParser<Expression<()>> {
 
         // Fall back to singular
         singular_expression().parse(state)
+    })
+}
+
+/// multiplicative := primary (("*" | "/") primary)*
+fn multiplicative_expr() -> BoxedParser<Expression<()>> {
+    BoxedParser::new(move |state: &mut ParseState| {
+        let mut left = primary_expr().parse(state)?;
+
+        loop {
+            let pos = state.position();
+            let token = state.peek();
+
+            let op = match token {
+                Some(Token::Star(_)) => {
+                    state.advance();
+                    BinOpKind::Mul
+                }
+                Some(Token::Slash(_)) => {
+                    state.advance();
+                    BinOpKind::Div
+                }
+                _ => break,
+            };
+
+            let right = match primary_expr().parse(state) {
+                Ok(r) => r,
+                Err(_) => {
+                    state.restore(pos);
+                    break;
+                }
+            };
+
+            let position = match &left {
+                Expression::Integer(i) => i.position.clone(),
+                Expression::Ident(i) => i.position.clone(),
+                Expression::BinaryOp(b) => b.position.clone(),
+                Expression::FunctionCall(f) => f.position.clone(),
+                Expression::Lambda(l) => l.position.clone(),
+                Expression::String(s) => s.position.clone(),
+                Expression::Unit(u) => u.position.clone(),
+            };
+
+            left = Expression::BinaryOp(BinaryOp {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+                position,
+                info: (),
+            });
+        }
+
+        Ok(left)
+    })
+}
+
+/// additive := multiplicative (("+" | "-") multiplicative)*
+fn additive_expr() -> BoxedParser<Expression<()>> {
+    BoxedParser::new(move |state: &mut ParseState| {
+        let mut left = multiplicative_expr().parse(state)?;
+
+        loop {
+            let pos = state.position();
+            let token = state.peek();
+
+            let op = match token {
+                Some(Token::Plus(_)) => {
+                    state.advance();
+                    BinOpKind::Add
+                }
+                Some(Token::Minus(_)) => {
+                    state.advance();
+                    BinOpKind::Sub
+                }
+                _ => break,
+            };
+
+            let right = match multiplicative_expr().parse(state) {
+                Ok(r) => r,
+                Err(_) => {
+                    state.restore(pos);
+                    break;
+                }
+            };
+
+            let position = match &left {
+                Expression::Integer(i) => i.position.clone(),
+                Expression::Ident(i) => i.position.clone(),
+                Expression::BinaryOp(b) => b.position.clone(),
+                Expression::FunctionCall(f) => f.position.clone(),
+                Expression::Lambda(l) => l.position.clone(),
+                Expression::String(s) => s.position.clone(),
+                Expression::Unit(u) => u.position.clone(),
+            };
+
+            left = Expression::BinaryOp(BinaryOp {
+                op,
+                left: Box::new(left),
+                right: Box::new(right),
+                position,
+                info: (),
+            });
+        }
+
+        Ok(left)
     })
 }

@@ -1,9 +1,10 @@
 //! End-to-end integration tests for complete program execution
 
 use ruskell::desugar::desugar_program;
-use ruskell::interpreter::{RValue, Scope};
+use ruskell::interpreter::{CapturedEnv, RValue, Scope};
 use ruskell::lexer::Token;
 use ruskell::parser::{ParseState, parse};
+use std::collections::HashMap;
 
 /// Parse and evaluate a program, returning the result of main
 fn run_program(input: &str) -> RValue<()> {
@@ -19,7 +20,11 @@ fn run_program(input: &str) -> RValue<()> {
     let core_program = desugar_program(program);
 
     let mut scope = Scope::new(core_program.functions);
-    core_program.main.lambda.run(RValue::Unit, &mut scope)
+    let empty_capture = CapturedEnv(HashMap::new());
+    core_program
+        .main
+        .lambda
+        .run(RValue::Unit, &mut scope, &empty_capture)
 }
 
 #[test]
@@ -177,7 +182,7 @@ fn e2e_top_level_function() {
             42
         end
         main = do
-            helper
+            helper(())
         end
     "#,
     );
@@ -195,7 +200,7 @@ fn e2e_multiple_top_level_functions() {
         one = do 1 end
         two = do 2 end
         main = do
-            two
+            two(())
         end
     "#,
     );
@@ -215,7 +220,7 @@ fn e2e_return_lambda() {
         end
     "#,
     );
-    assert!(matches!(result, RValue::CoreLambda(_)));
+    assert!(matches!(result, RValue::CoreLambda(..)));
 }
 
 // Note: Full closure support (capturing environment at creation time) is not yet implemented.
@@ -235,3 +240,228 @@ fn e2e_return_lambda() {
 //         panic!("expected integer");
 //     }
 // }
+
+#[test]
+fn e2e_arithmetic_addition() {
+    let result = run_program("main = do 5 + 3 end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 8);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_arithmetic_subtraction() {
+    let result = run_program("main = do 10 - 3 end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 7);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_arithmetic_multiplication() {
+    let result = run_program("main = do 4 * 7 end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 28);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_arithmetic_division() {
+    let result = run_program("main = do 20 / 4 end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 5);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_arithmetic_precedence() {
+    // Tests that * and / have higher precedence than + and -
+    // 2 + 3 * 4 should be 2 + (3 * 4) = 14, not (2 + 3) * 4 = 20
+    let result = run_program("main = do 2 + 3 * 4 end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 14);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_arithmetic_complex() {
+    let result = run_program(
+        r#"
+        main = do
+            x := 10
+            y := 20
+            sum := x + y
+            prod := x * y
+            diff := sum - prod
+            quotient := prod / x
+            quotient
+        end
+    "#,
+    );
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 20);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_arithmetic_parentheses() {
+    // (2 + 3) * 4 = 5 * 4 = 20
+    let result = run_program("main = do (2 + 3) * 4 end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 20);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_function_with_single_param() {
+    let input = r#"
+        increment x = x + 1
+
+        main = do
+            result := increment(5)
+            result
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 6);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_function_with_multiple_params() {
+    let input = r#"
+        add x y = x + y
+
+        main = do
+            result := add(10, 20)
+            result
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 30);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_function_with_expression_body() {
+    let input = r#"
+        double x = x * 2
+
+        main = do
+            result := double(21)
+            result
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 42);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_function_with_do_block_body() {
+    let input = r#"
+        compute x y = do
+            sum := x + y
+            product := sum * 2
+            product
+        end
+
+        main = do
+            result := compute(3, 7)
+            result
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 20);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_nested_function_calls_with_params() {
+    let input = r#"
+        add x y = x + y
+        multiply x y = x * y
+
+        main = do
+            sum := add(2, 3)
+            result := multiply(sum, 4)
+            result
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 20);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_function_params_shadow_outer_scope() {
+    let input = r#"
+        useParam x = x + 100
+
+        main = do
+            x := 5
+            result := useParam(10)
+            result
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 110);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_function_with_unit_param() {
+    let input = r#"
+        always42 () = 42
+
+        main = do
+            result := always42(())
+            result
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 42);
+    } else {
+        panic!("expected integer");
+    }
+}

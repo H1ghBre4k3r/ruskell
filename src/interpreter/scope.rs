@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::core::CoreFunction;
 
-use super::value::RValue;
+use super::value::{CapturedEnv, RValue};
 
 type ScopeFrame<T> = HashMap<String, RValue<T>>;
 
@@ -21,10 +21,25 @@ where
             frames: vec![
                 functions
                     .into_iter()
-                    .map(|func| (func.name.value.clone(), RValue::CoreLambda(func.lambda)))
+                    .map(|func| {
+                        (
+                            func.name.value.clone(),
+                            RValue::CoreLambda(func.lambda, CapturedEnv(HashMap::new())),
+                        )
+                    })
                     .collect::<HashMap<_, _>>(),
             ],
         }
+    }
+
+    /// Capture the current environment for a closure
+    pub fn capture(&self) -> CapturedEnv<T> {
+        let mut captured = HashMap::new();
+        // Capture all bindings from all frames
+        for frame in &self.frames {
+            captured.extend(frame.clone());
+        }
+        CapturedEnv(captured)
     }
 
     /// Enter a new scope frame
@@ -54,5 +69,10 @@ where
             .last_mut()
             .expect("scope stack should not be empty")
             .insert(name.to_string(), value);
+    }
+
+    /// Create a temporary scope with captured environment
+    pub fn with_captured(&mut self, captured: &CapturedEnv<T>) {
+        self.frames.push(captured.0.clone());
     }
 }

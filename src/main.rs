@@ -4,28 +4,24 @@ mod desugar;
 mod interpreter;
 mod lexer;
 mod parser;
+mod types;
 
 use std::process;
 
 use desugar::desugar_program;
 use lexer::Token;
 use parser::{ParseState, parse};
+use types::Infer;
 
 const INPUT: &str = r#"
+add x y = x + y
+
+multiply x y = x * y
+
 main = do
-    double := \x => do
-        intermediate := x
-        intermediate
-    end
-    y := 42
-    z := double(y)
-    z
-end
-
-foo = do 
-    fn := \x => \y => \z => do 
-
-    end
+    sum := add(5, 10)
+    product := multiply(sum, 2)
+    product
 end
 "#;
 
@@ -49,8 +45,38 @@ fn main() -> anyhow::Result<()> {
             // Desugar the program
             let desugared = desugar_program(prog);
 
-            println!("Running program...\n");
-            interpreter::run(desugared);
+            // Type check the desugared program
+            println!("Type checking...\n");
+            let mut infer = Infer::new();
+            match infer.infer_program(&desugared) {
+                Ok(type_env) => {
+                    println!("✓ Type checking passed!");
+
+                    // Print inferred types for main and functions
+                    if let Some(main_scheme) = type_env.lookup("main") {
+                        println!("  main : {}", main_scheme.ty.pretty());
+                    }
+                    for func in &desugared.functions {
+                        if let Some(scheme) = type_env.lookup(&func.name.value) {
+                            println!("  {} : {}", func.name.value, scheme.ty.pretty());
+                        }
+                    }
+                    println!();
+
+                    println!("Running program...\n");
+                    interpreter::run(desugared);
+                }
+                Err(type_errors) => {
+                    eprintln!(
+                        "Type checking failed with {} error(s):\n",
+                        type_errors.len()
+                    );
+                    for error in type_errors {
+                        eprintln!("{}\n", error);
+                    }
+                    process::exit(1);
+                }
+            }
         }
         Some(_) => {
             // Had errors but recovered enough to find main

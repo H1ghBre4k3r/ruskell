@@ -1,7 +1,12 @@
+use std::collections::HashMap;
 use std::fmt::Debug;
 
 use crate::ast::expression::{Integer, Lambda, StringLiteral};
 use crate::core::CoreLambda;
+
+/// A captured environment for closures
+#[derive(Debug, Clone)]
+pub struct CapturedEnv<T>(pub HashMap<String, RValue<T>>);
 
 /// Runtime value representation
 #[derive(Debug, Clone)]
@@ -10,5 +15,6 @@ pub enum RValue<T> {
     Integer(Integer<T>),
     String(StringLiteral<T>),
     Lambda(Lambda<T>),
-    CoreLambda(CoreLambda<T>),
+    /// Core lambda with captured environment (closure)
+    CoreLambda(CoreLambda<T>, CapturedEnv<T>),
 }
