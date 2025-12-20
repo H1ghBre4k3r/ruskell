@@ -95,15 +95,23 @@ cargo run
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Source    │ ──▶ │    Lexer    │ ──▶ │   Parser    │ ──▶ │ Interpreter │
-│    Code     │     │   (lachs)   │     │  (custom)   │     │  (eval)     │
+│   Source    │ ──▶ │    Lexer    │ ──▶ │   Parser    │ ──▶ │  Desugarer  │
+│    Code     │     │   (lachs)   │     │  (custom)   │     │             │
 └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+                                                                    │
+                                                                    ▼
+┌─────────────┐     ┌─────────────┐                         ┌─────────────┐
+│ Interpreter │ ◀── │    Type     │ ◀───────────────────────│   Core AST  │
+│   (eval)    │     │   Checker   │                         │             │
+└─────────────┘     └─────────────┘                         └─────────────┘
 ```
 
 ### Components
 
 - **Lexer** – Tokenizes source code using the `lachs` library with derive macros
-- **Parser** – Recursive descent parser building the AST
+- **Parser** – Recursive descent parser building the surface AST
+- **Desugarer** – Transforms surface AST to core AST (multi-param → single-param lambdas)
+- **Type Checker** – Hindley-Milner type inference with let-polymorphism
 - **Interpreter** – Tree-walking evaluator with scoped symbol resolution
 
 ## 📦 Dependencies
@@ -116,12 +124,12 @@ cargo run
 
 ## 🗺️ Roadmap
 
-- [ ] Function arguments/parameters
-- [ ] Type system
+- [x] Function arguments/parameters
+- [x] Type system (inference complete, annotations pending)
 - [ ] Pattern matching
 - [ ] More primitive types (floats, booleans)
 - [ ] Standard library
-- [ ] Better error messages
+- [x] Better error messages
 - [ ] REPL
 
 ## 🤝 Contributing
