@@ -6,9 +6,9 @@ pub enum Token {
     Do,
     #[terminal("end")]
     End,
-    #[literal("[a-zA-Z']*")]
+    #[literal("[a-zA-Z'][a-zA-Z0-9']*")]
     Ident,
-    #[literal("[0-9]*")]
+    #[literal("[0-9]+")]
     Integer,
     #[literal(r#""([^"\\]|\\.)*""#)]
     StringLiteral,

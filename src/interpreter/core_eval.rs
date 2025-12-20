@@ -17,20 +17,9 @@ where
     pub fn eval(&self, scope: &mut Scope<T>) -> RValue<T> {
         match self {
             CoreExpr::Unit(_) => RValue::Unit,
-            CoreExpr::Ident(ident) => {
-                let value = scope
-                    .resolve(&ident.value)
-                    .unwrap_or_else(|| panic!("undefined identifier: {}", ident.value));
-                // If it's a nullary lambda (no params), call it immediately
-                match &value {
-                    RValue::CoreLambda(lambda, captured)
-                        if matches!(lambda.param, CoreLambdaParam::Unit(_)) =>
-                    {
-                        lambda.run(RValue::Unit, scope, captured)
-                    }
-                    _ => value,
-                }
-            }
+            CoreExpr::Ident(ident) => scope
+                .resolve(&ident.value)
+                .unwrap_or_else(|| panic!("undefined identifier: {}", ident.value)),
             CoreExpr::Integer(integer) => RValue::Integer(crate::ast::expression::Integer {
                 value: integer.value,
                 position: integer.position.clone(),

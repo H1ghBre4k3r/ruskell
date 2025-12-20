@@ -208,3 +208,149 @@ fn parse_binary_with_parens() {
     let program = parse_program("main = do (1 + 2) * 3 end");
     assert_eq!(program.main.name.value, "main");
 }
+
+#[test]
+fn parse_function_with_single_param() {
+    let input = r#"
+        add x = x + 1
+        main = do end
+    "#;
+
+    let lexed = Token::lex(input).unwrap();
+    let mut state = ParseState::new(lexed);
+    let (program, errors) = parse(&mut state);
+
+    assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
+    assert!(program.is_some());
+
+    let prog = program.unwrap();
+    let add_fn = prog
+        .functions
+        .iter()
+        .find(|f| f.name.value == "add")
+        .unwrap();
+    assert_eq!(add_fn.lambda.params.len(), 1);
+}
+
+#[test]
+fn parse_function_with_multiple_params() {
+    let input = r#"
+        add x y = x + y
+        main = do end
+    "#;
+
+    let lexed = Token::lex(input).unwrap();
+    let mut state = ParseState::new(lexed);
+    let (program, errors) = parse(&mut state);
+
+    assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
+    assert!(program.is_some());
+
+    let prog = program.unwrap();
+    let add_fn = prog
+        .functions
+        .iter()
+        .find(|f| f.name.value == "add")
+        .unwrap();
+    assert_eq!(add_fn.lambda.params.len(), 2);
+}
+
+#[test]
+fn parse_function_with_unit_param() {
+    let input = r#"
+        ignore () = 42
+        main = do end
+    "#;
+
+    let lexed = Token::lex(input).unwrap();
+    let mut state = ParseState::new(lexed);
+    let (program, errors) = parse(&mut state);
+
+    assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
+    assert!(program.is_some());
+
+    let prog = program.unwrap();
+    let ignore_fn = prog
+        .functions
+        .iter()
+        .find(|f| f.name.value == "ignore")
+        .unwrap();
+    assert_eq!(ignore_fn.lambda.params.len(), 1);
+}
+
+#[test]
+fn parse_function_no_params_backwards_compat() {
+    let input = r#"
+        noparams = do
+            x := 5
+            x
+        end
+        main = do end
+    "#;
+
+    let lexed = Token::lex(input).unwrap();
+    let mut state = ParseState::new(lexed);
+    let (program, errors) = parse(&mut state);
+
+    assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
+    assert!(program.is_some());
+
+    let prog = program.unwrap();
+    let noparams_fn = prog
+        .functions
+        .iter()
+        .find(|f| f.name.value == "noparams")
+        .unwrap();
+    assert_eq!(noparams_fn.lambda.params.len(), 0);
+}
+
+#[test]
+fn parse_function_single_expression_body() {
+    let input = r#"
+        double x = x + x
+        main = do end
+    "#;
+
+    let lexed = Token::lex(input).unwrap();
+    let mut state = ParseState::new(lexed);
+    let (program, errors) = parse(&mut state);
+
+    assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
+    assert!(program.is_some());
+
+    let prog = program.unwrap();
+    let double_fn = prog
+        .functions
+        .iter()
+        .find(|f| f.name.value == "double")
+        .unwrap();
+    assert_eq!(double_fn.lambda.params.len(), 1);
+    assert!(matches!(double_fn.lambda.body, LambdaBody::Expression(_)));
+}
+
+#[test]
+fn parse_function_do_block_body() {
+    let input = r#"
+        compute x y = do
+            sum := x + y
+            sum * 2
+        end
+        main = do end
+    "#;
+
+    let lexed = Token::lex(input).unwrap();
+    let mut state = ParseState::new(lexed);
+    let (program, errors) = parse(&mut state);
+
+    assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
+    assert!(program.is_some());
+
+    let prog = program.unwrap();
+    let compute_fn = prog
+        .functions
+        .iter()
+        .find(|f| f.name.value == "compute")
+        .unwrap();
+    assert_eq!(compute_fn.lambda.params.len(), 2);
+    assert!(matches!(compute_fn.lambda.body, LambdaBody::Block(_)));
+}

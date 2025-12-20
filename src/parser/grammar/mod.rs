@@ -16,27 +16,93 @@ use crate::lexer::Token;
 use super::combinators::{BoxedParser, expect_do, expect_end, expect_equals, many};
 use super::state::{ParseError, ParseState, Parser};
 
+use expression::expression;
 use literal::ident;
 use statement::statement;
 
-/// function := ident "=" "do" statement* "end"
+/// lambda_param := "()" | ident
+fn lambda_param() -> BoxedParser<crate::ast::expression::LambdaParam<()>> {
+    use crate::ast::expression::LambdaParam;
+    use literal::unit;
+
+    BoxedParser::new(move |state: &mut ParseState| {
+        // Try unit pattern first
+        let pos = state.position();
+        if let Ok(u) = unit().parse(state) {
+            return Ok(LambdaParam::Unit(u));
+        }
+        state.restore(pos);
+
+        // Otherwise parse identifier
+        let id = ident().parse(state)?;
+        Ok(LambdaParam::Ident(id))
+    })
+}
+
+/// function_params := lambda_param*
+fn function_params() -> BoxedParser<Vec<crate::ast::expression::LambdaParam<()>>> {
+    BoxedParser::new(move |state: &mut ParseState| {
+        let mut params = Vec::new();
+
+        loop {
+            let pos = state.position();
+            match lambda_param().parse(state) {
+                Ok(param) => params.push(param),
+                Err(_) => {
+                    state.restore(pos);
+                    break;
+                }
+            }
+        }
+
+        Ok(params)
+    })
+}
+
+/// function := ident param* "=" ("do" statement* "end" | expression)
 pub fn function() -> BoxedParser<Function<()>> {
     BoxedParser::new(move |state: &mut ParseState| {
         let name = ident().label("function name").parse(state)?;
+        let start_pos = name.position.clone();
+        let params = function_params().parse(state)?;
         expect_equals().parse(state)?;
-        let start = expect_do().parse(state)?.pos();
-        let body = many(statement()).parse(state)?;
-        let end = expect_end().parse(state)?.pos();
 
-        Ok(Function {
-            name,
-            lambda: Lambda {
-                params: vec![],
-                body: LambdaBody::Block(body),
-                position: start.merge(&end),
-                info: (),
-            },
-        })
+        // Check if it's a do-block or single expression
+        let pos = state.position();
+        if expect_do().parse(state).is_ok() {
+            let body = many(statement()).parse(state)?;
+            let end = expect_end().parse(state)?.pos();
+            Ok(Function {
+                name,
+                lambda: Lambda {
+                    params,
+                    body: LambdaBody::Block(body),
+                    position: start_pos.merge(&end),
+                    info: (),
+                },
+            })
+        } else {
+            state.restore(pos);
+            let expr = expression().parse(state)?;
+            let position = match &expr {
+                crate::ast::expression::Expression::Integer(i) => i.position.clone(),
+                crate::ast::expression::Expression::Ident(i) => i.position.clone(),
+                crate::ast::expression::Expression::BinaryOp(b) => b.position.clone(),
+                crate::ast::expression::Expression::FunctionCall(f) => f.position.clone(),
+                crate::ast::expression::Expression::Lambda(l) => l.position.clone(),
+                crate::ast::expression::Expression::String(s) => s.position.clone(),
+                crate::ast::expression::Expression::Unit(u) => u.position.clone(),
+            };
+            Ok(Function {
+                name,
+                lambda: Lambda {
+                    params,
+                    body: LambdaBody::Expression(Box::new(expr)),
+                    position: start_pos.merge(&position),
+                    info: (),
+                },
+            })
+        }
     })
 }
 

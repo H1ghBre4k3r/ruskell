@@ -14,12 +14,14 @@ use parser::{ParseState, parse};
 use types::Infer;
 
 const INPUT: &str = r#"
+add x y = x + y
+
+multiply x y = x * y
+
 main = do
-    x := 10 + 5
-    y := x * 2
-    z := y - 10
-    result := z / 2
-    result
+    sum := add(5, 10)
+    product := multiply(sum, 2)
+    product
 end
 "#;
 
