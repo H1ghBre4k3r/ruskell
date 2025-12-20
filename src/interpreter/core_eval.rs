@@ -46,54 +46,114 @@ where
                 }
             }
             CoreExpr::BinaryOp(binop) => {
-                let left = binop.left.eval(scope);
-                let right = binop.right.eval(scope);
+                use crate::ast::expression::BinOpKind;
 
-                let left_val = match left {
-                    RValue::Integer(i) => i.value,
-                    _ => panic!("left operand must be integer"),
-                };
+                match binop.op {
+                    // Arithmetic and comparison operators need integer operands
+                    BinOpKind::Add
+                    | BinOpKind::Sub
+                    | BinOpKind::Mul
+                    | BinOpKind::Div
+                    | BinOpKind::Eq
+                    | BinOpKind::NotEq
+                    | BinOpKind::Lt
+                    | BinOpKind::Gt
+                    | BinOpKind::LtEq
+                    | BinOpKind::GtEq => {
+                        let left = binop.left.eval(scope);
+                        let right = binop.right.eval(scope);
 
-                let right_val = match right {
-                    RValue::Integer(i) => i.value,
-                    _ => panic!("right operand must be integer"),
-                };
+                        let left_val = match left {
+                            RValue::Integer(i) => i.value,
+                            _ => panic!("left operand must be integer"),
+                        };
 
-                let result = match binop.op {
-                    crate::ast::expression::BinOpKind::Add => left_val + right_val,
-                    crate::ast::expression::BinOpKind::Sub => left_val - right_val,
-                    crate::ast::expression::BinOpKind::Mul => left_val * right_val,
-                    crate::ast::expression::BinOpKind::Div => {
-                        if right_val == 0 {
-                            panic!("division by zero");
+                        let right_val = match right {
+                            RValue::Integer(i) => i.value,
+                            _ => panic!("right operand must be integer"),
+                        };
+
+                        match binop.op {
+                            BinOpKind::Add => RValue::Integer(crate::ast::expression::Integer {
+                                value: left_val + right_val,
+                                position: binop.position.clone(),
+                                info: binop.info.clone(),
+                            }),
+                            BinOpKind::Sub => RValue::Integer(crate::ast::expression::Integer {
+                                value: left_val - right_val,
+                                position: binop.position.clone(),
+                                info: binop.info.clone(),
+                            }),
+                            BinOpKind::Mul => RValue::Integer(crate::ast::expression::Integer {
+                                value: left_val * right_val,
+                                position: binop.position.clone(),
+                                info: binop.info.clone(),
+                            }),
+                            BinOpKind::Div => {
+                                if right_val == 0 {
+                                    panic!("division by zero");
+                                }
+                                RValue::Integer(crate::ast::expression::Integer {
+                                    value: left_val / right_val,
+                                    position: binop.position.clone(),
+                                    info: binop.info.clone(),
+                                })
+                            }
+                            BinOpKind::Eq => RValue::Bool(left_val == right_val),
+                            BinOpKind::NotEq => RValue::Bool(left_val != right_val),
+                            BinOpKind::Lt => RValue::Bool(left_val < right_val),
+                            BinOpKind::Gt => RValue::Bool(left_val > right_val),
+                            BinOpKind::LtEq => RValue::Bool(left_val <= right_val),
+                            BinOpKind::GtEq => RValue::Bool(left_val >= right_val),
+                            _ => unreachable!(),
                         }
-                        left_val / right_val
                     }
-                    crate::ast::expression::BinOpKind::Eq => {
-                        return RValue::Bool(left_val == right_val);
-                    }
-                    crate::ast::expression::BinOpKind::NotEq => {
-                        return RValue::Bool(left_val != right_val);
-                    }
-                    crate::ast::expression::BinOpKind::Lt => {
-                        return RValue::Bool(left_val < right_val);
-                    }
-                    crate::ast::expression::BinOpKind::Gt => {
-                        return RValue::Bool(left_val > right_val);
-                    }
-                    crate::ast::expression::BinOpKind::LtEq => {
-                        return RValue::Bool(left_val <= right_val);
-                    }
-                    crate::ast::expression::BinOpKind::GtEq => {
-                        return RValue::Bool(left_val >= right_val);
-                    }
-                };
 
-                RValue::Integer(crate::ast::expression::Integer {
-                    value: result,
-                    position: binop.position.clone(),
-                    info: binop.info.clone(),
-                })
+                    // Logical operators need boolean operands with short-circuit
+                    BinOpKind::And => {
+                        let left = binop.left.eval(scope);
+                        match left {
+                            RValue::Bool(false) => RValue::Bool(false), // Short-circuit
+                            RValue::Bool(true) => {
+                                let right = binop.right.eval(scope);
+                                match right {
+                                    RValue::Bool(b) => RValue::Bool(b),
+                                    _ => panic!("&& requires boolean operands"),
+                                }
+                            }
+                            _ => panic!("&& requires boolean operands"),
+                        }
+                    }
+
+                    BinOpKind::Or => {
+                        let left = binop.left.eval(scope);
+                        match left {
+                            RValue::Bool(true) => RValue::Bool(true), // Short-circuit
+                            RValue::Bool(false) => {
+                                let right = binop.right.eval(scope);
+                                match right {
+                                    RValue::Bool(b) => RValue::Bool(b),
+                                    _ => panic!("|| requires boolean operands"),
+                                }
+                            }
+                            _ => panic!("|| requires boolean operands"),
+                        }
+                    }
+                }
+            }
+
+            CoreExpr::UnaryOp(unop) => {
+                use crate::ast::expression::UnaryOpKind;
+
+                match unop.op {
+                    UnaryOpKind::Not => {
+                        let operand = unop.operand.eval(scope);
+                        match operand {
+                            RValue::Bool(b) => RValue::Bool(!b),
+                            _ => panic!("! operator requires boolean operand"),
+                        }
+                    }
+                }
             }
         }
     }

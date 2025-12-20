@@ -139,6 +139,12 @@ fn desugar_expr(expr: ast::expression::Expression<()>) -> CoreExpr<()> {
             position: binop.position,
             info: (),
         }),
+        Expression::UnaryOp(unop) => CoreExpr::UnaryOp(CoreUnaryOp {
+            op: unop.op,
+            operand: Box::new(desugar_expr(*unop.operand)),
+            position: unop.position,
+            info: (),
+        }),
     }
 }
 

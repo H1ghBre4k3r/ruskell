@@ -181,6 +181,8 @@ impl Infer {
             CoreExpr::FunctionCall(call) => self.infer_call(env, call),
 
             CoreExpr::BinaryOp(binop) => self.infer_binop(env, binop),
+
+            CoreExpr::UnaryOp(unop) => self.infer_unaryop(env, unop),
         }
     }
 
@@ -289,6 +291,49 @@ impl Infer {
                     .map_err(|e| TypeError::from_unify_error(e, binop.position.clone()))?;
 
                 let final_subst = s4.compose(&s3).compose(&s2).compose(&s1);
+
+                Ok((final_subst, Type::Bool))
+            }
+
+            // Logical operators: Bool -> Bool -> Bool
+            BinOpKind::And | BinOpKind::Or => {
+                let (s1, left_ty) = self.infer_expr(env, &binop.left)?;
+                let env1 = env.apply_subst(&s1);
+                let (s2, right_ty) = self.infer_expr(&env1, &binop.right)?;
+
+                // Unify left with Bool
+                let left_ty_subst = s2.apply(&left_ty);
+                let s3 = unify(&left_ty_subst, &Type::Bool)
+                    .map_err(|e| TypeError::from_unify_error(e, binop.position.clone()))?;
+
+                // Unify right with Bool
+                let right_ty_subst = s3.apply(&right_ty);
+                let s4 = unify(&right_ty_subst, &Type::Bool)
+                    .map_err(|e| TypeError::from_unify_error(e, binop.position.clone()))?;
+
+                let final_subst = s4.compose(&s3).compose(&s2).compose(&s1);
+
+                Ok((final_subst, Type::Bool))
+            }
+        }
+    }
+
+    fn infer_unaryop(
+        &mut self,
+        env: &TypeEnv,
+        unop: &crate::core::CoreUnaryOp<()>,
+    ) -> Result<(Substitution, Type), TypeError> {
+        use crate::ast::expression::UnaryOpKind;
+
+        match unop.op {
+            UnaryOpKind::Not => {
+                let (s1, operand_ty) = self.infer_expr(env, &unop.operand)?;
+
+                // Unify operand with Bool
+                let s2 = unify(&operand_ty, &Type::Bool)
+                    .map_err(|e| TypeError::from_unify_error(e, unop.position.clone()))?;
+
+                let final_subst = s2.compose(&s1);
 
                 Ok((final_subst, Type::Bool))
             }

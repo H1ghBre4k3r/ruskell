@@ -89,6 +89,12 @@ fn erase_expr(expr: CoreExpr<()>) -> ast::expression::Expression<()> {
             position: binop.position,
             info: (),
         }),
+        CoreExpr::UnaryOp(unop) => Expression::UnaryOp(ast::expression::UnaryOp {
+            op: unop.op,
+            operand: Box::new(erase_expr(*unop.operand)),
+            position: unop.position,
+            info: (),
+        }),
     }
 }
 

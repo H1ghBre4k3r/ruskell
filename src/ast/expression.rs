@@ -12,6 +12,7 @@ pub enum Expression<T> {
     FunctionCall(FunctionCall<T>),
     Lambda(Lambda<T>),
     BinaryOp(BinaryOp<T>),
+    UnaryOp(UnaryOp<T>),
 }
 
 #[derive(Debug, Clone)]
@@ -90,6 +91,14 @@ pub enum BinOpKind {
     Gt,
     LtEq,
     GtEq,
+    And,
+    Or,
+}
+
+/// Unary operator kinds
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnaryOpKind {
+    Not,
 }
 
 /// Binary operation expression
@@ -98,6 +107,15 @@ pub struct BinaryOp<T> {
     pub op: BinOpKind,
     pub left: Box<Expression<T>>,
     pub right: Box<Expression<T>>,
+    pub position: Span,
+    pub info: T,
+}
+
+/// Unary operation expression
+#[derive(Debug, Clone)]
+pub struct UnaryOp<T> {
+    pub op: UnaryOpKind,
+    pub operand: Box<Expression<T>>,
     pub position: Span,
     pub info: T,
 }

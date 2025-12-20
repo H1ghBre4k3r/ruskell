@@ -54,6 +54,12 @@ pub enum Token {
     LessThan,
     #[terminal(">")]
     GreaterThan,
+    #[terminal("&&")]
+    LogicalAnd,
+    #[terminal("||")]
+    LogicalOr,
+    #[terminal("!")]
+    LogicalNot,
 }
 
 impl Token {
@@ -85,6 +91,9 @@ impl Token {
             Token::GreaterEquals(inner) => inner.position.clone(),
             Token::LessThan(inner) => inner.position.clone(),
             Token::GreaterThan(inner) => inner.position.clone(),
+            Token::LogicalAnd(inner) => inner.position.clone(),
+            Token::LogicalOr(inner) => inner.position.clone(),
+            Token::LogicalNot(inner) => inner.position.clone(),
         }
     }
 
@@ -117,6 +126,9 @@ impl Token {
             Token::GreaterEquals(_) => "'>='".to_string(),
             Token::LessThan(_) => "'<'".to_string(),
             Token::GreaterThan(_) => "'>'".to_string(),
+            Token::LogicalAnd(_) => "'&&'".to_string(),
+            Token::LogicalOr(_) => "'||'".to_string(),
+            Token::LogicalNot(_) => "'!'".to_string(),
         }
     }
 }
