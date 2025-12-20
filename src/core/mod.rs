@@ -16,6 +16,7 @@ pub enum CoreExpr<T> {
     Ident(CoreIdent<T>),
     Integer(CoreInteger<T>),
     String(CoreString<T>),
+    Boolean(CoreBoolean<T>),
     Lambda(CoreLambda<T>),
     FunctionCall(CoreFunctionCall<T>),
     BinaryOp(CoreBinaryOp<T>),
@@ -44,6 +45,13 @@ pub struct CoreInteger<T> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CoreString<T> {
     pub value: String,
+    pub position: Span,
+    pub info: T,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CoreBoolean<T> {
+    pub value: bool,
     pub position: Span,
     pub info: T,
 }

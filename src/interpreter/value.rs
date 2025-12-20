@@ -14,6 +14,7 @@ pub enum RValue<T> {
     Unit,
     Integer(Integer<T>),
     String(StringLiteral<T>),
+    Bool(bool),
     Lambda(Lambda<T>),
     /// Core lambda with captured environment (closure)
     CoreLambda(CoreLambda<T>, CapturedEnv<T>),

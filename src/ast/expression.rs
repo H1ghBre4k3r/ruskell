@@ -8,6 +8,7 @@ pub enum Expression<T> {
     Ident(Ident<T>),
     Integer(Integer<T>),
     String(StringLiteral<T>),
+    Boolean(Boolean<T>),
     FunctionCall(FunctionCall<T>),
     Lambda(Lambda<T>),
     BinaryOp(BinaryOp<T>),
@@ -47,6 +48,13 @@ pub struct StringLiteral<T> {
 }
 
 #[derive(Debug, Clone)]
+pub struct Boolean<T> {
+    pub value: bool,
+    pub position: Span,
+    pub info: T,
+}
+
+#[derive(Debug, Clone)]
 pub struct FunctionCall<T> {
     pub func: Box<Expression<T>>,
     pub args: Vec<Expression<T>>,
@@ -76,6 +84,12 @@ pub enum BinOpKind {
     Sub,
     Mul,
     Div,
+    Eq,
+    NotEq,
+    Lt,
+    Gt,
+    LtEq,
+    GtEq,
 }
 
 /// Binary operation expression

@@ -125,6 +125,11 @@ fn desugar_expr(expr: ast::expression::Expression<()>) -> CoreExpr<()> {
             position: s.position,
             info: (),
         }),
+        Expression::Boolean(b) => CoreExpr::Boolean(CoreBoolean {
+            value: b.value,
+            position: b.position,
+            info: (),
+        }),
         Expression::Lambda(lambda) => CoreExpr::Lambda(desugar_lambda(lambda)),
         Expression::FunctionCall(call) => desugar_function_call(call),
         Expression::BinaryOp(binop) => CoreExpr::BinaryOp(CoreBinaryOp {

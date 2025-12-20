@@ -30,6 +30,7 @@ where
                 position: string.position.clone(),
                 info: string.info.clone(),
             }),
+            CoreExpr::Boolean(boolean) => RValue::Bool(boolean.value),
             CoreExpr::Lambda(lambda) => {
                 // Capture the current environment for the closure
                 let captured = scope.capture();
@@ -67,6 +68,24 @@ where
                             panic!("division by zero");
                         }
                         left_val / right_val
+                    }
+                    crate::ast::expression::BinOpKind::Eq => {
+                        return RValue::Bool(left_val == right_val);
+                    }
+                    crate::ast::expression::BinOpKind::NotEq => {
+                        return RValue::Bool(left_val != right_val);
+                    }
+                    crate::ast::expression::BinOpKind::Lt => {
+                        return RValue::Bool(left_val < right_val);
+                    }
+                    crate::ast::expression::BinOpKind::Gt => {
+                        return RValue::Bool(left_val > right_val);
+                    }
+                    crate::ast::expression::BinOpKind::LtEq => {
+                        return RValue::Bool(left_val <= right_val);
+                    }
+                    crate::ast::expression::BinOpKind::GtEq => {
+                        return RValue::Bool(left_val >= right_val);
                     }
                 };
 

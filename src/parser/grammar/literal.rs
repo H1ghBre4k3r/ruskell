@@ -1,6 +1,6 @@
 //! Literal parsers for the Ruskell language
 
-use crate::ast::expression::{Ident, Integer, StringLiteral, Unit};
+use crate::ast::expression::{Boolean, Ident, Integer, StringLiteral, Unit};
 use crate::lexer::Token;
 
 use crate::parser::combinators::{BoxedParser, expect_lparen, expect_rparen};
@@ -102,6 +102,47 @@ pub fn string_literal() -> BoxedParser<StringLiteral<()>> {
         }
         None => {
             let err = ParseError::new("unexpected end of input").expected("string");
+            state.record_error(err.clone());
+            Err(err)
+        }
+    })
+}
+
+/// Parse a boolean literal
+pub fn boolean() -> BoxedParser<Boolean<()>> {
+    BoxedParser::new(|state: &mut ParseState| match state.peek() {
+        Some(Token::True(_)) => {
+            if let Token::True(t) = state.advance().unwrap() {
+                Ok(Boolean {
+                    value: true,
+                    position: t.position,
+                    info: (),
+                })
+            } else {
+                unreachable!()
+            }
+        }
+        Some(Token::False(_)) => {
+            if let Token::False(f) = state.advance().unwrap() {
+                Ok(Boolean {
+                    value: false,
+                    position: f.position,
+                    info: (),
+                })
+            } else {
+                unreachable!()
+            }
+        }
+        Some(tok) => {
+            let err = ParseError::new("unexpected token")
+                .expected("boolean")
+                .found(tok.describe())
+                .at(tok.pos());
+            state.record_error(err.clone());
+            Err(err)
+        }
+        None => {
+            let err = ParseError::new("unexpected end of input").expected("boolean");
             state.record_error(err.clone());
             Err(err)
         }

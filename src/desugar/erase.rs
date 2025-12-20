@@ -70,6 +70,11 @@ fn erase_expr(expr: CoreExpr<()>) -> ast::expression::Expression<()> {
             position: s.position,
             info: (),
         }),
+        CoreExpr::Boolean(b) => Expression::Boolean(ast::expression::Boolean {
+            value: b.value,
+            position: b.position,
+            info: (),
+        }),
         CoreExpr::Lambda(lambda) => Expression::Lambda(erase_lambda(lambda)),
         CoreExpr::FunctionCall(call) => Expression::FunctionCall(ast::expression::FunctionCall {
             func: Box::new(erase_expr(*call.func)),

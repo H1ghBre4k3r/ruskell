@@ -163,6 +163,8 @@ impl Infer {
 
             CoreExpr::String(_) => Ok((Substitution::empty(), Type::String)),
 
+            CoreExpr::Boolean(_) => Ok((Substitution::empty(), Type::Bool)),
+
             CoreExpr::Ident(ident) => match env.lookup(&ident.value) {
                 Some(scheme) => {
                     let ty = self.instantiate(scheme);
@@ -241,24 +243,56 @@ impl Infer {
         env: &TypeEnv,
         binop: &crate::core::CoreBinaryOp<()>,
     ) -> Result<(Substitution, Type), TypeError> {
-        // All arithmetic operators work on Int -> Int -> Int
-        let (s1, left_ty) = self.infer_expr(env, &binop.left)?;
-        let env1 = env.apply_subst(&s1);
-        let (s2, right_ty) = self.infer_expr(&env1, &binop.right)?;
+        use crate::ast::expression::BinOpKind;
 
-        // Unify left with Int
-        let left_ty_subst = s2.apply(&left_ty);
-        let s3 = unify(&left_ty_subst, &Type::Int)
-            .map_err(|e| TypeError::from_unify_error(e, binop.position.clone()))?;
+        match binop.op {
+            // Arithmetic operators: Int -> Int -> Int
+            BinOpKind::Add | BinOpKind::Sub | BinOpKind::Mul | BinOpKind::Div => {
+                let (s1, left_ty) = self.infer_expr(env, &binop.left)?;
+                let env1 = env.apply_subst(&s1);
+                let (s2, right_ty) = self.infer_expr(&env1, &binop.right)?;
 
-        // Unify right with Int
-        let right_ty_subst = s3.apply(&right_ty);
-        let s4 = unify(&right_ty_subst, &Type::Int)
-            .map_err(|e| TypeError::from_unify_error(e, binop.position.clone()))?;
+                // Unify left with Int
+                let left_ty_subst = s2.apply(&left_ty);
+                let s3 = unify(&left_ty_subst, &Type::Int)
+                    .map_err(|e| TypeError::from_unify_error(e, binop.position.clone()))?;
 
-        let final_subst = s4.compose(&s3).compose(&s2).compose(&s1);
+                // Unify right with Int
+                let right_ty_subst = s3.apply(&right_ty);
+                let s4 = unify(&right_ty_subst, &Type::Int)
+                    .map_err(|e| TypeError::from_unify_error(e, binop.position.clone()))?;
 
-        Ok((final_subst, Type::Int))
+                let final_subst = s4.compose(&s3).compose(&s2).compose(&s1);
+
+                Ok((final_subst, Type::Int))
+            }
+
+            // Comparison operators: Int -> Int -> Bool
+            BinOpKind::Eq
+            | BinOpKind::NotEq
+            | BinOpKind::Lt
+            | BinOpKind::Gt
+            | BinOpKind::LtEq
+            | BinOpKind::GtEq => {
+                let (s1, left_ty) = self.infer_expr(env, &binop.left)?;
+                let env1 = env.apply_subst(&s1);
+                let (s2, right_ty) = self.infer_expr(&env1, &binop.right)?;
+
+                // Unify left with Int
+                let left_ty_subst = s2.apply(&left_ty);
+                let s3 = unify(&left_ty_subst, &Type::Int)
+                    .map_err(|e| TypeError::from_unify_error(e, binop.position.clone()))?;
+
+                // Unify right with Int
+                let right_ty_subst = s3.apply(&right_ty);
+                let s4 = unify(&right_ty_subst, &Type::Int)
+                    .map_err(|e| TypeError::from_unify_error(e, binop.position.clone()))?;
+
+                let final_subst = s4.compose(&s3).compose(&s2).compose(&s1);
+
+                Ok((final_subst, Type::Bool))
+            }
+        }
     }
 
     fn infer_statement(

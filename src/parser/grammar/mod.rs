@@ -87,6 +87,7 @@ pub fn function() -> BoxedParser<Function<()>> {
             let position = match &expr {
                 crate::ast::expression::Expression::Integer(i) => i.position.clone(),
                 crate::ast::expression::Expression::Ident(i) => i.position.clone(),
+                crate::ast::expression::Expression::Boolean(b) => b.position.clone(),
                 crate::ast::expression::Expression::BinaryOp(b) => b.position.clone(),
                 crate::ast::expression::Expression::FunctionCall(f) => f.position.clone(),
                 crate::ast::expression::Expression::Lambda(l) => l.position.clone(),

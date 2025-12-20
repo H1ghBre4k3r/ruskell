@@ -21,6 +21,7 @@ pub fn run(CoreProgram { main, functions }: CoreProgram<()>) {
     match return_value {
         RValue::Integer(integer) => process::exit(integer.value as i32),
         RValue::Unit => process::exit(0),
+        RValue::Bool(b) => process::exit(if b { 0 } else { 1 }),
         RValue::String(_string_literal) => todo!("string return not implemented"),
         RValue::CoreLambda(_, _) => process::exit(0),
         // Legacy: shouldn't happen with Core AST

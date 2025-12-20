@@ -11,7 +11,7 @@ use crate::parser::combinators::{
 };
 use crate::parser::state::{ParseState, Parser};
 
-use super::literal::{ident, integer, string_literal, unit};
+use super::literal::{boolean, ident, integer, string_literal, unit};
 use super::statement::statement;
 
 /// unit_literal := "()"
@@ -19,11 +19,12 @@ pub fn unit_literal() -> BoxedParser<Expression<()>> {
     unit() >> |u| Expression::Unit(u)
 }
 
-/// singular := unit_literal | ident | integer | string
+/// singular := unit_literal | boolean | ident | integer | string
 pub fn singular_expression() -> BoxedParser<Expression<()>> {
     let ident_expr = ident() >> |id| Expression::Ident(id);
     let int_expr = integer() >> |i| Expression::Integer(i);
     let str_expr = string_literal() >> |s| Expression::String(s);
+    let bool_expr = boolean() >> |b| Expression::Boolean(b);
 
     // Try unit first (before ident consumes something else)
     BoxedParser::new(move |state: &mut ParseState| {
@@ -33,7 +34,7 @@ pub fn singular_expression() -> BoxedParser<Expression<()>> {
         }
         state.restore(pos);
 
-        (ident_expr.clone() | int_expr.clone() | str_expr.clone()).parse(state)
+        (bool_expr.clone() | ident_expr.clone() | int_expr.clone() | str_expr.clone()).parse(state)
     })
 }
 
@@ -164,6 +165,71 @@ pub fn lambda() -> BoxedParser<Expression<()>> {
     })
 }
 
+/// comparison := additive (comp_op additive)?
+/// comp_op := "==" | "!=" | "<" | ">" | "<=" | ">="
+fn comparison_expr() -> BoxedParser<Expression<()>> {
+    BoxedParser::new(move |state: &mut ParseState| {
+        let left = additive_expr().parse(state)?;
+
+        let pos = state.position();
+        let token = state.peek();
+
+        let op = match token {
+            Some(Token::DoubleEquals(_)) => {
+                state.advance();
+                BinOpKind::Eq
+            }
+            Some(Token::NotEquals(_)) => {
+                state.advance();
+                BinOpKind::NotEq
+            }
+            Some(Token::LessThan(_)) => {
+                state.advance();
+                BinOpKind::Lt
+            }
+            Some(Token::GreaterThan(_)) => {
+                state.advance();
+                BinOpKind::Gt
+            }
+            Some(Token::LessEquals(_)) => {
+                state.advance();
+                BinOpKind::LtEq
+            }
+            Some(Token::GreaterEquals(_)) => {
+                state.advance();
+                BinOpKind::GtEq
+            }
+            _ => return Ok(left),
+        };
+
+        let right = match additive_expr().parse(state) {
+            Ok(r) => r,
+            Err(_) => {
+                state.restore(pos);
+                return Ok(left);
+            }
+        };
+
+        let position = match &left {
+            Expression::Integer(i) => i.position.clone(),
+            Expression::Ident(i) => i.position.clone(),
+            Expression::Boolean(b) => b.position.clone(),
+            Expression::BinaryOp(b) => b.position.clone(),
+            Expression::FunctionCall(f) => f.position.clone(),
+            Expression::Lambda(l) => l.position.clone(),
+            Expression::String(s) => s.position.clone(),
+            Expression::Unit(u) => u.position.clone(),
+        };
+
+        Ok(Expression::BinaryOp(BinaryOp {
+            op,
+            left: Box::new(left),
+            right: Box::new(right),
+            position,
+            info: (),
+        }))
+    })
+}
 /// expression := lambda | function_call | singular
 pub fn expression() -> BoxedParser<Expression<()>> {
     BoxedParser::new(move |state: &mut ParseState| {
@@ -175,8 +241,8 @@ pub fn expression() -> BoxedParser<Expression<()>> {
         }
         state.restore(pos);
 
-        // Try additive expression (handles all binary ops)
-        additive_expr().parse(state)
+        // Try comparison expression (handles all binary ops)
+        comparison_expr().parse(state)
     })
 }
 
@@ -247,6 +313,7 @@ fn multiplicative_expr() -> BoxedParser<Expression<()>> {
             let position = match &left {
                 Expression::Integer(i) => i.position.clone(),
                 Expression::Ident(i) => i.position.clone(),
+                Expression::Boolean(b) => b.position.clone(),
                 Expression::BinaryOp(b) => b.position.clone(),
                 Expression::FunctionCall(f) => f.position.clone(),
                 Expression::Lambda(l) => l.position.clone(),
@@ -299,6 +366,7 @@ fn additive_expr() -> BoxedParser<Expression<()>> {
             let position = match &left {
                 Expression::Integer(i) => i.position.clone(),
                 Expression::Ident(i) => i.position.clone(),
+                Expression::Boolean(b) => b.position.clone(),
                 Expression::BinaryOp(b) => b.position.clone(),
                 Expression::FunctionCall(f) => f.position.clone(),
                 Expression::Lambda(l) => l.position.clone(),
