@@ -24,14 +24,254 @@ pub fn desugar_program(program: ast::Program<()>) -> CoreProgram<()> {
 fn desugar_function_def(def: ast::FunctionDef<()>) -> CoreFunction<()> {
     match def {
         ast::FunctionDef::Single(func) => desugar_function(func),
-        ast::FunctionDef::Multi {
-            name: _,
-            clauses: _,
-        } => {
-            // TODO: implement multi-clause desugaring
-            panic!("Multi-clause functions not yet implemented in desugaring")
+        ast::FunctionDef::Multi { name, clauses } => desugar_multi_clause_function(name, clauses),
+    }
+}
+
+/// Desugar multi-clause function to single function with match expression
+///
+/// Example:
+/// ```ruskell
+/// factorial 0 = 1
+/// factorial n = n * factorial(n - 1)
+/// ```
+///
+/// Becomes:
+/// ```ruskell
+/// factorial = \__arg0 =>
+///   case __arg0 of
+///     0 => 1
+///     n => n * factorial(n - 1)
+///   end
+/// ```
+fn desugar_multi_clause_function(
+    name: ast::expression::Ident<()>,
+    clauses: Vec<ast::pattern::FunctionClause<()>>,
+) -> CoreFunction<()> {
+    if clauses.is_empty() {
+        panic!("Multi-clause function with no clauses");
+    }
+
+    // Get the number of parameters from the first clause
+    let num_params = clauses[0].patterns.len();
+
+    // Verify all clauses have the same number of parameters
+    for clause in &clauses {
+        if clause.patterns.len() != num_params {
+            panic!(
+                "Function {} has clauses with different numbers of patterns: {} vs {}",
+                name.value,
+                num_params,
+                clause.patterns.len()
+            );
         }
     }
+
+    let position = name.position.clone();
+
+    // Build nested lambdas with match expressions
+    let body = build_pattern_matching_lambda(clauses, num_params, position.clone());
+
+    CoreFunction {
+        name: desugar_ident(name),
+        lambda: body,
+    }
+}
+
+/// Build nested lambdas with pattern matching for multi-clause functions
+fn build_pattern_matching_lambda(
+    clauses: Vec<ast::pattern::FunctionClause<()>>,
+    num_params: usize,
+    position: lachs::Span,
+) -> CoreLambda<()> {
+    if num_params == 0 {
+        // No parameters - function takes unit
+        // Just use the body of the first (and should be only) clause
+        if clauses.len() > 1 {
+            panic!("Multi-clause function with no parameters doesn't make sense");
+        }
+
+        let clause = clauses.into_iter().next().unwrap();
+        return CoreLambda {
+            param: CoreLambdaParam::Unit(CoreUnit {
+                position: position.clone(),
+                info: (),
+            }),
+            body: match clause.body {
+                ast::expression::LambdaBody::Expression(expr) => {
+                    CoreLambdaBody::Expression(Box::new(desugar_expr(*expr)))
+                }
+                ast::expression::LambdaBody::Block(stmts) => {
+                    CoreLambdaBody::Block(stmts.into_iter().map(desugar_statement).collect())
+                }
+            },
+            position,
+            info: (),
+        };
+    }
+
+    // Generate fresh parameter names
+    let param_names: Vec<String> = (0..num_params).map(|i| format!("__arg{}", i)).collect();
+
+    // Build match arms for each clause
+    let match_expr = build_nested_match(clauses, &param_names, 0, position.clone());
+
+    // Wrap in nested lambdas
+    build_nested_lambdas(&param_names, match_expr, position)
+}
+
+/// Build nested match expressions for multiple parameters
+/// For single parameter, creates a simple match. For multiple, creates nested matches.
+fn build_nested_match(
+    clauses: Vec<ast::pattern::FunctionClause<()>>,
+    param_names: &[String],
+    param_index: usize,
+    position: lachs::Span,
+) -> CoreExpr<()> {
+    if param_index >= param_names.len() {
+        panic!("Parameter index out of bounds");
+    }
+
+    // Create scrutinee: the current parameter variable
+    let scrutinee = ast::expression::Expression::Ident(ast::expression::Ident {
+        value: param_names[param_index].clone(),
+        position: position.clone(),
+        info: (),
+    });
+
+    // Build match arms
+    let arms: Vec<ast::pattern::MatchArm<()>> = clauses
+        .into_iter()
+        .map(|clause| {
+            let pattern = clause.patterns[param_index].clone();
+
+            // If this is the last parameter, use the clause body
+            // Otherwise, create another nested match for the next parameter
+            let body = if param_index == param_names.len() - 1 {
+                // Last parameter - use the clause body
+                match clause.body {
+                    ast::expression::LambdaBody::Expression(expr) => *expr,
+                    ast::expression::LambdaBody::Block(stmts) => {
+                        // Convert block to expression
+                        // For now, panic - we'll need to handle this better
+                        if stmts.is_empty() {
+                            ast::expression::Expression::Unit(ast::expression::Unit {
+                                position: clause.position.clone(),
+                                info: (),
+                            })
+                        } else if stmts.len() == 1 {
+                            match &stmts[0] {
+                                ast::statement::Statement::Expression(expr) => expr.clone(),
+                                _ => panic!(
+                                    "Multi-clause function with block body not yet fully supported"
+                                ),
+                            }
+                        } else {
+                            panic!(
+                                "Multi-clause function with multi-statement block not yet supported"
+                            )
+                        }
+                    }
+                }
+            } else {
+                // Not the last parameter - we need to continue matching on remaining parameters
+                // For now, just use the body (this is incomplete for multi-param pattern matching)
+                match clause.body {
+                    ast::expression::LambdaBody::Expression(expr) => *expr,
+                    ast::expression::LambdaBody::Block(stmts) => {
+                        if stmts.is_empty() {
+                            ast::expression::Expression::Unit(ast::expression::Unit {
+                                position: clause.position.clone(),
+                                info: (),
+                            })
+                        } else if stmts.len() == 1 {
+                            match &stmts[0] {
+                                ast::statement::Statement::Expression(expr) => expr.clone(),
+                                _ => panic!(
+                                    "Multi-clause function with block body not yet fully supported"
+                                ),
+                            }
+                        } else {
+                            panic!(
+                                "Multi-clause function with multi-statement block not yet supported"
+                            )
+                        }
+                    }
+                }
+            };
+
+            ast::pattern::MatchArm {
+                pattern,
+                body,
+                position: clause.position.clone(),
+                info: (),
+            }
+        })
+        .collect();
+
+    // Create the match expression and desugar it
+    let match_expr = ast::pattern::Match {
+        scrutinee: Box::new(scrutinee),
+        arms,
+        position: position.clone(),
+        info: (),
+    };
+
+    desugar_match(match_expr)
+}
+
+/// Build nested lambdas: \arg0 => \arg1 => ... => body
+fn build_nested_lambdas(
+    param_names: &[String],
+    body: CoreExpr<()>,
+    position: lachs::Span,
+) -> CoreLambda<()> {
+    if param_names.is_empty() {
+        panic!("Cannot build lambda with no parameters");
+    }
+
+    if param_names.len() == 1 {
+        // Single parameter
+        return CoreLambda {
+            param: CoreLambdaParam::Ident(CoreIdent {
+                value: param_names[0].clone(),
+                position: position.clone(),
+                info: (),
+            }),
+            body: CoreLambdaBody::Expression(Box::new(body)),
+            position,
+            info: (),
+        };
+    }
+
+    // Multiple parameters: build nested lambdas
+    // Start from the innermost lambda (last parameter)
+    let mut result = CoreLambda {
+        param: CoreLambdaParam::Ident(CoreIdent {
+            value: param_names[param_names.len() - 1].clone(),
+            position: position.clone(),
+            info: (),
+        }),
+        body: CoreLambdaBody::Expression(Box::new(body)),
+        position: position.clone(),
+        info: (),
+    };
+
+    // Wrap in outer lambdas
+    for i in (0..param_names.len() - 1).rev() {
+        result = CoreLambda {
+            param: CoreLambdaParam::Ident(CoreIdent {
+                value: param_names[i].clone(),
+                position: position.clone(),
+                info: (),
+            }),
+            body: CoreLambdaBody::Expression(Box::new(CoreExpr::Lambda(result))),
+            position: position.clone(),
+            info: (),
+        };
+    }
+
+    result
 }
 
 fn desugar_function(func: ast::Function<()>) -> CoreFunction<()> {

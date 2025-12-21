@@ -1016,3 +1016,66 @@ fn test_case_fallthrough_to_wildcard() {
         panic!("expected integer");
     }
 }
+
+#[test]
+fn e2e_multi_clause_function_literal_match() {
+    let input = r#"
+        isZero 0 = true
+        isZero n = false
+        
+        main = do
+            result := isZero(0)
+            result
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Bool(b) = result {
+        assert_eq!(b, true);
+    } else {
+        panic!("expected boolean, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_multi_clause_function_literal_no_match() {
+    let input = r#"
+        isZero 0 = true
+        isZero n = false
+        
+        main = do
+            result := isZero(5)
+            result
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Bool(b) = result {
+        assert_eq!(b, false);
+    } else {
+        panic!("expected boolean, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_multi_clause_function_with_wildcard() {
+    let input = r#"
+        check 0 = 100
+        check 1 = 200
+        check _ = 999
+        
+        main = do
+            a := check(0)
+            b := check(1)
+            c := check(42)
+            c
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 999);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
