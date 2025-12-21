@@ -18,7 +18,7 @@ fib 0 = 0
 fib 1 = 1
 fib n = fib(n - 1) + fib(n - 2)
 
-main = fib(6)
+main = fib(8)
 "#;
 
 fn main() -> anyhow::Result<()> {
