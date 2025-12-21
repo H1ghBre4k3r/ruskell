@@ -443,7 +443,7 @@ impl Default for Infer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::expression::BinOpKind;
+    use crate::ast::expression::{BinOpKind, UnaryOpKind};
 
     // Helper to create test expressions
     fn unit_expr() -> CoreExpr<()> {
@@ -1045,6 +1045,165 @@ mod tests {
         // Check that result has type Bool
         let result_scheme = new_env.lookup("result").unwrap();
         assert_eq!(result_scheme.ty, Type::Bool);
+    }
+
+    // ===== Logical Operator Type Tests =====
+
+    #[test]
+    fn test_infer_logical_not() {
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty();
+
+        let unop = CoreExpr::UnaryOp(CoreUnaryOp {
+            op: UnaryOpKind::Not,
+            operand: Box::new(boolean_expr(true)),
+            position: Span::default(),
+            info: (),
+        });
+
+        let (_, ty) = infer.infer_expr(&env, &unop).unwrap();
+        assert_eq!(ty, Type::Bool);
+    }
+
+    #[test]
+    fn test_infer_logical_and() {
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty();
+
+        let binop = CoreExpr::BinaryOp(CoreBinaryOp {
+            op: BinOpKind::And,
+            left: Box::new(boolean_expr(true)),
+            right: Box::new(boolean_expr(false)),
+            position: Span::default(),
+            info: (),
+        });
+
+        let (_, ty) = infer.infer_expr(&env, &binop).unwrap();
+        assert_eq!(ty, Type::Bool);
+    }
+
+    #[test]
+    fn test_infer_logical_or() {
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty();
+
+        let binop = CoreExpr::BinaryOp(CoreBinaryOp {
+            op: BinOpKind::Or,
+            left: Box::new(boolean_expr(false)),
+            right: Box::new(boolean_expr(true)),
+            position: Span::default(),
+            info: (),
+        });
+
+        let (_, ty) = infer.infer_expr(&env, &binop).unwrap();
+        assert_eq!(ty, Type::Bool);
+    }
+
+    #[test]
+    fn test_infer_logical_not_type_error() {
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty();
+
+        // Try to apply ! to an integer
+        let unop = CoreExpr::UnaryOp(CoreUnaryOp {
+            op: UnaryOpKind::Not,
+            operand: Box::new(int_expr(42)),
+            position: Span::default(),
+            info: (),
+        });
+
+        let result = infer.infer_expr(&env, &unop);
+        assert!(result.is_err(), "Expected type error for !42");
+    }
+
+    #[test]
+    fn test_infer_logical_and_type_error_left() {
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty();
+
+        // Try: 5 && true (left is not bool)
+        let binop = CoreExpr::BinaryOp(CoreBinaryOp {
+            op: BinOpKind::And,
+            left: Box::new(int_expr(5)),
+            right: Box::new(boolean_expr(true)),
+            position: Span::default(),
+            info: (),
+        });
+
+        let result = infer.infer_expr(&env, &binop);
+        assert!(result.is_err(), "Expected type error for 5 && true");
+    }
+
+    #[test]
+    fn test_infer_logical_and_type_error_right() {
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty();
+
+        // Try: true && 10 (right is not bool)
+        let binop = CoreExpr::BinaryOp(CoreBinaryOp {
+            op: BinOpKind::And,
+            left: Box::new(boolean_expr(true)),
+            right: Box::new(int_expr(10)),
+            position: Span::default(),
+            info: (),
+        });
+
+        let result = infer.infer_expr(&env, &binop);
+        assert!(result.is_err(), "Expected type error for true && 10");
+    }
+
+    #[test]
+    fn test_infer_logical_with_variables() {
+        let mut infer = Infer::new();
+        let mut env = TypeEnv::empty();
+
+        // Add x: Bool and y: Bool to environment
+        env = env.extend("x".to_string(), TypeScheme::monomorphic(Type::Bool));
+        env = env.extend("y".to_string(), TypeScheme::monomorphic(Type::Bool));
+
+        let binop = CoreExpr::BinaryOp(CoreBinaryOp {
+            op: BinOpKind::And,
+            left: Box::new(ident_expr("x")),
+            right: Box::new(ident_expr("y")),
+            position: Span::default(),
+            info: (),
+        });
+
+        let (_, ty) = infer.infer_expr(&env, &binop).unwrap();
+        assert_eq!(ty, Type::Bool);
+    }
+
+    #[test]
+    fn test_infer_complex_logical_expression() {
+        let mut infer = Infer::new();
+        let env = TypeEnv::empty();
+
+        // (!true) || (false && true)
+        let not_expr = CoreExpr::UnaryOp(CoreUnaryOp {
+            op: UnaryOpKind::Not,
+            operand: Box::new(boolean_expr(true)),
+            position: Span::default(),
+            info: (),
+        });
+
+        let and_expr = CoreExpr::BinaryOp(CoreBinaryOp {
+            op: BinOpKind::And,
+            left: Box::new(boolean_expr(false)),
+            right: Box::new(boolean_expr(true)),
+            position: Span::default(),
+            info: (),
+        });
+
+        let or_expr = CoreExpr::BinaryOp(CoreBinaryOp {
+            op: BinOpKind::Or,
+            left: Box::new(not_expr),
+            right: Box::new(and_expr),
+            position: Span::default(),
+            info: (),
+        });
+
+        let (_, ty) = infer.infer_expr(&env, &or_expr).unwrap();
+        assert_eq!(ty, Type::Bool);
     }
 
     // Helper functions for tests

@@ -608,3 +608,139 @@ fn e2e_comparison_negative_numbers() {
     let result = run_program("main = do 0 - 5 < 0 end");
     assert!(matches!(result, RValue::Bool(true)));
 }
+
+// ===== Logical Operator Integration Tests =====
+
+#[test]
+fn e2e_logical_not_true() {
+    let result = run_program("main = do !true end");
+    assert!(matches!(result, RValue::Bool(false)));
+}
+
+#[test]
+fn e2e_logical_not_false() {
+    let result = run_program("main = do !false end");
+    assert!(matches!(result, RValue::Bool(true)));
+}
+
+#[test]
+fn e2e_logical_and_true_true() {
+    let result = run_program("main = do true && true end");
+    assert!(matches!(result, RValue::Bool(true)));
+}
+
+#[test]
+fn e2e_logical_and_true_false() {
+    let result = run_program("main = do true && false end");
+    assert!(matches!(result, RValue::Bool(false)));
+}
+
+#[test]
+fn e2e_logical_and_false_true() {
+    let result = run_program("main = do false && true end");
+    assert!(matches!(result, RValue::Bool(false)));
+}
+
+#[test]
+fn e2e_logical_and_false_false() {
+    let result = run_program("main = do false && false end");
+    assert!(matches!(result, RValue::Bool(false)));
+}
+
+#[test]
+fn e2e_logical_or_true_true() {
+    let result = run_program("main = do true || true end");
+    assert!(matches!(result, RValue::Bool(true)));
+}
+
+#[test]
+fn e2e_logical_or_true_false() {
+    let result = run_program("main = do true || false end");
+    assert!(matches!(result, RValue::Bool(true)));
+}
+
+#[test]
+fn e2e_logical_or_false_true() {
+    let result = run_program("main = do false || true end");
+    assert!(matches!(result, RValue::Bool(true)));
+}
+
+#[test]
+fn e2e_logical_or_false_false() {
+    let result = run_program("main = do false || false end");
+    assert!(matches!(result, RValue::Bool(false)));
+}
+
+#[test]
+fn e2e_logical_not_precedence() {
+    // !false && true → (!false) && true → true && true → true
+    let result = run_program("main = do !false && true end");
+    assert!(matches!(result, RValue::Bool(true)));
+}
+
+#[test]
+fn e2e_logical_and_or_precedence() {
+    // true && false || true → (true && false) || true → false || true → true
+    let result = run_program("main = do true && false || true end");
+    assert!(matches!(result, RValue::Bool(true)));
+}
+
+#[test]
+fn e2e_logical_complex_precedence() {
+    // !true || false && true → (!true) || (false && true) → false || false → false
+    let result = run_program("main = do !true || false && true end");
+    assert!(matches!(result, RValue::Bool(false)));
+}
+
+#[test]
+fn e2e_logical_with_comparison() {
+    // (5 < 10) && (10 < 20) → true && true → true
+    let result = run_program("main = do (5 < 10) && (10 < 20) end");
+    assert!(matches!(result, RValue::Bool(true)));
+}
+
+#[test]
+fn e2e_logical_comparison_no_parens() {
+    // 5 < 10 && 10 < 20 → (5 < 10) && (10 < 20) → true && true → true
+    let result = run_program("main = do 5 < 10 && 10 < 20 end");
+    assert!(matches!(result, RValue::Bool(true)));
+}
+
+#[test]
+fn e2e_logical_with_variables() {
+    let input = r#"
+        main = do
+            x := true
+            y := false
+            x && !y
+        end
+    "#;
+    let result = run_program(input);
+    assert!(matches!(result, RValue::Bool(true)));
+}
+
+#[test]
+fn e2e_logical_binding() {
+    let input = r#"
+        main = do
+            result := true && false
+            result
+        end
+    "#;
+    let result = run_program(input);
+    assert!(matches!(result, RValue::Bool(false)));
+}
+
+#[test]
+fn e2e_double_negation() {
+    // !!true → !(!true) → !false → true
+    let result = run_program("main = do !!true end");
+    assert!(matches!(result, RValue::Bool(true)));
+}
+
+#[test]
+fn e2e_complex_boolean_expression() {
+    // (5 < 10 && 10 < 20) || (3 > 5) → (true && true) || false → true || false → true
+    let result = run_program("main = do (5 < 10 && 10 < 20) || (3 > 5) end");
+    assert!(matches!(result, RValue::Bool(true)));
+}

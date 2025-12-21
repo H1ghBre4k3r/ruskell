@@ -125,3 +125,39 @@ fn lex_arithmetic_operators() {
     assert!(matches!(tokens[2], Token::Star(_)));
     assert!(matches!(tokens[3], Token::Slash(_)));
 }
+
+// ===== Logical Operator Lexer Tests =====
+
+#[test]
+fn lex_logical_operators() {
+    let tokens = Token::lex("&& || !").unwrap();
+    assert_eq!(tokens.len(), 3);
+    assert!(matches!(tokens[0], Token::LogicalAnd(_)));
+    assert!(matches!(tokens[1], Token::LogicalOr(_)));
+    assert!(matches!(tokens[2], Token::LogicalNot(_)));
+}
+
+#[test]
+fn lex_logical_and_longest_match() {
+    // Test that && is one token, not two separate tokens
+    let tokens = Token::lex("&&").unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert!(matches!(tokens[0], Token::LogicalAnd(_)));
+}
+
+#[test]
+fn lex_logical_or_longest_match() {
+    // Test that || is one token
+    let tokens = Token::lex("||").unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert!(matches!(tokens[0], Token::LogicalOr(_)));
+}
+
+#[test]
+fn lex_logical_not_separate() {
+    // Test that ! is separate from !=
+    let tokens = Token::lex("! !=").unwrap();
+    assert_eq!(tokens.len(), 2);
+    assert!(matches!(tokens[0], Token::LogicalNot(_)));
+    assert!(matches!(tokens[1], Token::NotEquals(_)));
+}

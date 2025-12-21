@@ -458,3 +458,151 @@ fn parse_all_comparison_operators() {
         }
     }
 }
+
+// ===== Logical Operator Parser Tests =====
+
+#[test]
+fn parse_logical_not() {
+    let program = parse_program("main = do !true end");
+
+    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+        assert_eq!(stmts.len(), 1);
+        if let Statement::Expression(Expression::UnaryOp(unop)) = &stmts[0] {
+            assert!(matches!(
+                unop.op,
+                ruskell::ast::expression::UnaryOpKind::Not
+            ));
+            // Operand should be a boolean
+            assert!(matches!(*unop.operand, Expression::Boolean(_)));
+        } else {
+            panic!("expected unary op expression");
+        }
+    } else {
+        panic!("expected block body");
+    }
+}
+
+#[test]
+fn parse_logical_and() {
+    let program = parse_program("main = do true && false end");
+
+    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+        assert_eq!(stmts.len(), 1);
+        if let Statement::Expression(Expression::BinaryOp(binop)) = &stmts[0] {
+            assert!(matches!(binop.op, ruskell::ast::expression::BinOpKind::And));
+        } else {
+            panic!("expected binary op expression");
+        }
+    } else {
+        panic!("expected block body");
+    }
+}
+
+#[test]
+fn parse_logical_or() {
+    let program = parse_program("main = do true || false end");
+
+    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+        assert_eq!(stmts.len(), 1);
+        if let Statement::Expression(Expression::BinaryOp(binop)) = &stmts[0] {
+            assert!(matches!(binop.op, ruskell::ast::expression::BinOpKind::Or));
+        } else {
+            panic!("expected binary op expression");
+        }
+    } else {
+        panic!("expected block body");
+    }
+}
+
+#[test]
+fn parse_logical_precedence_not_and() {
+    // !x && y should parse as (!x) && y
+    let program = parse_program("main = do !true && false end");
+
+    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+        assert_eq!(stmts.len(), 1);
+        if let Statement::Expression(Expression::BinaryOp(binop)) = &stmts[0] {
+            // Outer operation should be &&
+            assert!(matches!(binop.op, ruskell::ast::expression::BinOpKind::And));
+            // Left side should be a UnaryOp (!)
+            assert!(matches!(*binop.left, Expression::UnaryOp(_)));
+            // Right side should be Boolean
+            assert!(matches!(*binop.right, Expression::Boolean(_)));
+        } else {
+            panic!("expected binary op expression");
+        }
+    } else {
+        panic!("expected block body");
+    }
+}
+
+#[test]
+fn parse_logical_precedence_and_or() {
+    // x && y || z should parse as (x && y) || z
+    let program = parse_program("main = do true && false || true end");
+
+    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+        assert_eq!(stmts.len(), 1);
+        if let Statement::Expression(Expression::BinaryOp(binop)) = &stmts[0] {
+            // Outer operation should be ||
+            assert!(matches!(binop.op, ruskell::ast::expression::BinOpKind::Or));
+            // Left side should be a BinaryOp (&&)
+            if let Expression::BinaryOp(left_binop) = &*binop.left {
+                assert!(matches!(
+                    left_binop.op,
+                    ruskell::ast::expression::BinOpKind::And
+                ));
+            } else {
+                panic!("expected left side to be binary op");
+            }
+        } else {
+            panic!("expected binary op expression");
+        }
+    } else {
+        panic!("expected block body");
+    }
+}
+
+#[test]
+fn parse_logical_with_comparison() {
+    // x < 5 && y > 10 should parse as (x < 5) && (y > 10)
+    let program = parse_program("main = do x := 1 y := 2 x < 5 && y > 10 end");
+
+    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+        // Last statement should be the logical expression
+        if let Statement::Expression(Expression::BinaryOp(binop)) = &stmts[2] {
+            // Outer operation should be &&
+            assert!(matches!(binop.op, ruskell::ast::expression::BinOpKind::And));
+            // Both sides should be comparison operators
+            assert!(matches!(*binop.left, Expression::BinaryOp(_)));
+            assert!(matches!(*binop.right, Expression::BinaryOp(_)));
+        } else {
+            panic!("expected binary op expression");
+        }
+    } else {
+        panic!("expected block body");
+    }
+}
+
+#[test]
+fn parse_double_negation() {
+    // !!x should parse as !(!x)
+    let program = parse_program("main = do !!true end");
+
+    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+        assert_eq!(stmts.len(), 1);
+        if let Statement::Expression(Expression::UnaryOp(unop)) = &stmts[0] {
+            // Outer operation should be !
+            assert!(matches!(
+                unop.op,
+                ruskell::ast::expression::UnaryOpKind::Not
+            ));
+            // Operand should also be a UnaryOp (!)
+            assert!(matches!(*unop.operand, Expression::UnaryOp(_)));
+        } else {
+            panic!("expected unary op expression");
+        }
+    } else {
+        panic!("expected block body");
+    }
+}
