@@ -606,3 +606,79 @@ fn parse_double_negation() {
         panic!("expected block body");
     }
 }
+
+#[test]
+fn parse_simple_if_then_else() {
+    let program = parse_program("main = do if true then 1 else 2 end end");
+
+    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+        assert_eq!(stmts.len(), 1);
+        if let Statement::Expression(Expression::IfThenElse(if_expr)) = &stmts[0] {
+            // Check condition is boolean
+            assert!(matches!(*if_expr.condition, Expression::Boolean(_)));
+            // Check then branch is integer 1
+            if let Expression::Integer(i) = &*if_expr.then_expr {
+                assert_eq!(i.value, 1);
+            } else {
+                panic!("expected integer in then branch");
+            }
+            // Check else branch is integer 2
+            if let Expression::Integer(i) = &*if_expr.else_expr {
+                assert_eq!(i.value, 2);
+            } else {
+                panic!("expected integer in else branch");
+            }
+        } else {
+            panic!("expected if-then-else expression");
+        }
+    } else {
+        panic!("expected block body");
+    }
+}
+
+#[test]
+fn parse_if_with_comparison() {
+    let program = parse_program("main = do if x > 0 then 1 else 0 - 1 end end");
+
+    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+        assert_eq!(stmts.len(), 1);
+        if let Statement::Expression(Expression::IfThenElse(if_expr)) = &stmts[0] {
+            // Check condition is a comparison
+            assert!(matches!(*if_expr.condition, Expression::BinaryOp(_)));
+        } else {
+            panic!("expected if-then-else expression");
+        }
+    } else {
+        panic!("expected block body");
+    }
+}
+
+#[test]
+fn parse_nested_if() {
+    let program =
+        parse_program("main = do if x > 0 then 1 else if x < 0 then 0 - 1 else 0 end end end");
+
+    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+        assert_eq!(stmts.len(), 1);
+        if let Statement::Expression(Expression::IfThenElse(outer_if)) = &stmts[0] {
+            // Check else branch contains another if
+            assert!(matches!(*outer_if.else_expr, Expression::IfThenElse(_)));
+        } else {
+            panic!("expected if-then-else expression");
+        }
+    } else {
+        panic!("expected block body");
+    }
+}
+
+#[test]
+fn parse_if_as_function_body() {
+    let program = parse_program("main x = if x > 0 then 1 else 0 - 1 end");
+
+    // Function should have a single-expression body with if-then-else
+    if let LambdaBody::Expression(expr) = &program.main.lambda.body {
+        assert!(matches!(**expr, Expression::IfThenElse(_)));
+    } else {
+        panic!("expected expression body");
+    }
+}

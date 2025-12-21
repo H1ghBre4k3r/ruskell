@@ -155,6 +155,15 @@ where
                     }
                 }
             }
+
+            CoreExpr::IfThenElse(if_expr) => {
+                let condition = if_expr.condition.eval(scope);
+                match condition {
+                    RValue::Bool(true) => if_expr.then_expr.eval(scope),
+                    RValue::Bool(false) => if_expr.else_expr.eval(scope),
+                    _ => panic!("if condition must be boolean"),
+                }
+            }
         }
     }
 }

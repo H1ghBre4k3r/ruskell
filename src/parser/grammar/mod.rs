@@ -94,6 +94,7 @@ pub fn function() -> BoxedParser<Function<()>> {
                 crate::ast::expression::Expression::String(s) => s.position.clone(),
                 crate::ast::expression::Expression::Unit(u) => u.position.clone(),
                 crate::ast::expression::Expression::UnaryOp(u) => u.position.clone(),
+                crate::ast::expression::Expression::IfThenElse(i) => i.position.clone(),
             };
             Ok(Function {
                 name,

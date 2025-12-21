@@ -1,15 +1,15 @@
 //! Expression parsers for the Ruskell language
 
 use crate::ast::expression::{
-    BinOpKind, BinaryOp, Expression, FunctionCall, Lambda, LambdaBody, LambdaParam, UnaryOp,
-    UnaryOpKind,
+    BinOpKind, BinaryOp, Expression, FunctionCall, IfThenElse, Lambda, LambdaBody, LambdaParam,
+    UnaryOp, UnaryOpKind,
 };
 use crate::lexer::Token;
 
 use crate::parser::combinators::{
-    BoxedParser, expect_arrow, expect_backslash, expect_comma, expect_do, expect_end,
-    expect_logical_and, expect_logical_not, expect_logical_or, expect_lparen, expect_rparen, many,
-    optional,
+    BoxedParser, expect_arrow, expect_backslash, expect_comma, expect_do, expect_else, expect_end,
+    expect_if, expect_logical_and, expect_logical_not, expect_logical_or, expect_lparen,
+    expect_rparen, expect_then, many, optional,
 };
 use crate::parser::state::{ParseState, Parser};
 
@@ -167,6 +167,27 @@ pub fn lambda() -> BoxedParser<Expression<()>> {
     })
 }
 
+/// if_then_else := "if" expression "then" expression "else" expression "end"
+pub fn if_then_else() -> BoxedParser<Expression<()>> {
+    BoxedParser::new(move |state: &mut ParseState| {
+        let start = expect_if().parse(state)?.pos();
+        let condition = expression().parse(state)?;
+        expect_then().parse(state)?;
+        let then_expr = expression().parse(state)?;
+        expect_else().parse(state)?;
+        let else_expr = expression().parse(state)?;
+        let end = expect_end().parse(state)?.pos();
+
+        Ok(Expression::IfThenElse(IfThenElse {
+            condition: Box::new(condition),
+            then_expr: Box::new(then_expr),
+            else_expr: Box::new(else_expr),
+            position: start.merge(&end),
+            info: (),
+        }))
+    })
+}
+
 /// comparison := additive (comp_op additive)?
 /// comp_op := "==" | "!=" | "<" | ">" | "<=" | ">="
 fn comparison_expr() -> BoxedParser<Expression<()>> {
@@ -222,6 +243,7 @@ fn comparison_expr() -> BoxedParser<Expression<()>> {
             Expression::String(s) => s.position.clone(),
             Expression::Unit(u) => u.position.clone(),
             Expression::UnaryOp(u) => u.position.clone(),
+            Expression::IfThenElse(i) => i.position.clone(),
         };
 
         Ok(Expression::BinaryOp(BinaryOp {
@@ -328,13 +350,19 @@ fn logical_or_expr() -> BoxedParser<Expression<()>> {
     })
 }
 
-/// expression := lambda | logical_or
+/// expression := lambda | if_then_else | logical_or
 pub fn expression() -> BoxedParser<Expression<()>> {
     BoxedParser::new(move |state: &mut ParseState| {
         let pos = state.position();
 
         // Try lambda
         if let Ok(expr) = lambda().parse(state) {
+            return Ok(expr);
+        }
+        state.restore(pos);
+
+        // Try if-then-else
+        if let Ok(expr) = if_then_else().parse(state) {
             return Ok(expr);
         }
         state.restore(pos);
@@ -418,6 +446,7 @@ fn multiplicative_expr() -> BoxedParser<Expression<()>> {
                 Expression::String(s) => s.position.clone(),
                 Expression::Unit(u) => u.position.clone(),
                 Expression::UnaryOp(u) => u.position.clone(),
+                Expression::IfThenElse(i) => i.position.clone(),
             };
 
             left = Expression::BinaryOp(BinaryOp {
@@ -472,6 +501,7 @@ fn additive_expr() -> BoxedParser<Expression<()>> {
                 Expression::String(s) => s.position.clone(),
                 Expression::Unit(u) => u.position.clone(),
                 Expression::UnaryOp(u) => u.position.clone(),
+                Expression::IfThenElse(i) => i.position.clone(),
             };
 
             left = Expression::BinaryOp(BinaryOp {
@@ -499,6 +529,7 @@ fn expr_position(expr: &Expression<()>) -> lachs::Span {
         Expression::Lambda(l) => l.position.clone(),
         Expression::BinaryOp(b) => b.position.clone(),
         Expression::UnaryOp(u) => u.position.clone(),
+        Expression::IfThenElse(i) => i.position.clone(),
     }
 }
 

@@ -183,6 +183,8 @@ impl Infer {
             CoreExpr::BinaryOp(binop) => self.infer_binop(env, binop),
 
             CoreExpr::UnaryOp(unop) => self.infer_unaryop(env, unop),
+
+            CoreExpr::IfThenElse(if_expr) => self.infer_if_then_else(env, if_expr),
         }
     }
 
@@ -338,6 +340,49 @@ impl Infer {
                 Ok((final_subst, Type::Bool))
             }
         }
+    }
+
+    fn infer_if_then_else(
+        &mut self,
+        env: &TypeEnv,
+        if_expr: &crate::core::CoreIfThenElse<()>,
+    ) -> Result<(Substitution, Type), TypeError> {
+        // 1. Infer condition type
+        let (s1, cond_ty) = self.infer_expr(env, &if_expr.condition)?;
+
+        // 2. Unify condition with Bool
+        let s2 = unify(&cond_ty, &Type::Bool).map_err(|e| {
+            TypeError::from_unify_error(e, if_expr.condition.position())
+                .with_context("condition must be a boolean".to_string())
+        })?;
+
+        // 3. Compose and apply to environment
+        let s3 = s2.compose(&s1);
+        let env1 = env.apply_subst(&s3);
+
+        // 4. Infer then branch
+        let (s4, then_ty) = self.infer_expr(&env1, &if_expr.then_expr)?;
+        let s5 = s4.compose(&s3);
+        let env2 = env.apply_subst(&s5);
+
+        // 5. Infer else branch
+        let (s6, else_ty) = self.infer_expr(&env2, &if_expr.else_expr)?;
+        let s7 = s6.compose(&s5);
+
+        // 6. Unify both branches
+        let then_ty_subst = s7.apply(&then_ty);
+        let else_ty_subst = s7.apply(&else_ty);
+
+        let s8 = unify(&then_ty_subst, &else_ty_subst).map_err(|e| {
+            TypeError::from_unify_error(e, if_expr.else_expr.position())
+                .with_context("if branches must have the same type".to_string())
+        })?;
+
+        // 7. Final type and substitution
+        let s9 = s8.compose(&s7);
+        let result_ty = s9.apply(&then_ty_subst);
+
+        Ok((s9, result_ty))
     }
 
     fn infer_statement(

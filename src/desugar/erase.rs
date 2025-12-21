@@ -95,6 +95,13 @@ fn erase_expr(expr: CoreExpr<()>) -> ast::expression::Expression<()> {
             position: unop.position,
             info: (),
         }),
+        CoreExpr::IfThenElse(if_expr) => Expression::IfThenElse(ast::expression::IfThenElse {
+            condition: Box::new(erase_expr(*if_expr.condition)),
+            then_expr: Box::new(erase_expr(*if_expr.then_expr)),
+            else_expr: Box::new(erase_expr(*if_expr.else_expr)),
+            position: if_expr.position,
+            info: (),
+        }),
     }
 }
 

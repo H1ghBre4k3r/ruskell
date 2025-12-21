@@ -253,6 +253,18 @@ pub fn expect_logical_not() -> BoxedParser<Token> {
     token_with_error(|t| matches!(t, Token::LogicalNot(_)), "'!'")
 }
 
+pub fn expect_if() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::If(_)), "'if'")
+}
+
+pub fn expect_then() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::Then(_)), "'then'")
+}
+
+pub fn expect_else() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::Else(_)), "'else'")
+}
+
 /// Parse zero or more occurrences
 pub fn many<T: 'static>(parser: BoxedParser<T>) -> BoxedParser<Vec<T>> {
     BoxedParser::new(move |state: &mut ParseState| {

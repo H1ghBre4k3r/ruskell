@@ -145,6 +145,13 @@ fn desugar_expr(expr: ast::expression::Expression<()>) -> CoreExpr<()> {
             position: unop.position,
             info: (),
         }),
+        Expression::IfThenElse(if_expr) => CoreExpr::IfThenElse(CoreIfThenElse {
+            condition: Box::new(desugar_expr(*if_expr.condition)),
+            then_expr: Box::new(desugar_expr(*if_expr.then_expr)),
+            else_expr: Box::new(desugar_expr(*if_expr.else_expr)),
+            position: if_expr.position,
+            info: (),
+        }),
     }
 }
 

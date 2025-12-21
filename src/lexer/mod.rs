@@ -10,6 +10,12 @@ pub enum Token {
     True,
     #[terminal("false")]
     False,
+    #[terminal("if")]
+    If,
+    #[terminal("then")]
+    Then,
+    #[terminal("else")]
+    Else,
     #[literal("[a-zA-Z'][a-zA-Z0-9']*")]
     Ident,
     #[literal("[0-9]+")]
@@ -85,6 +91,9 @@ impl Token {
             Token::Slash(inner) => inner.position.clone(),
             Token::True(inner) => inner.position.clone(),
             Token::False(inner) => inner.position.clone(),
+            Token::If(inner) => inner.position.clone(),
+            Token::Then(inner) => inner.position.clone(),
+            Token::Else(inner) => inner.position.clone(),
             Token::DoubleEquals(inner) => inner.position.clone(),
             Token::NotEquals(inner) => inner.position.clone(),
             Token::LessEquals(inner) => inner.position.clone(),
@@ -120,6 +129,9 @@ impl Token {
             Token::Slash(_) => "'/'".to_string(),
             Token::True(_) => "'true'".to_string(),
             Token::False(_) => "'false'".to_string(),
+            Token::If(_) => "'if'".to_string(),
+            Token::Then(_) => "'then'".to_string(),
+            Token::Else(_) => "'else'".to_string(),
             Token::DoubleEquals(_) => "'=='".to_string(),
             Token::NotEquals(_) => "'!='".to_string(),
             Token::LessEquals(_) => "'<='".to_string(),

@@ -744,3 +744,170 @@ fn e2e_complex_boolean_expression() {
     let result = run_program("main = do (5 < 10 && 10 < 20) || (3 > 5) end");
     assert!(matches!(result, RValue::Bool(true)));
 }
+
+#[test]
+fn e2e_simple_if_true() {
+    let result = run_program("main = do if true then 42 else 0 end end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 42);
+    } else {
+        panic!("expected integer 42");
+    }
+}
+
+#[test]
+fn e2e_simple_if_false() {
+    let result = run_program("main = do if false then 42 else 99 end end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 99);
+    } else {
+        panic!("expected integer 99");
+    }
+}
+
+#[test]
+fn e2e_if_with_variable() {
+    let input = r#"
+        main = do
+            x := 10
+            if x > 5 then 1 else 0 end
+        end
+    "#;
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 1);
+    } else {
+        panic!("expected integer 1");
+    }
+}
+
+#[test]
+fn e2e_nested_if_positive() {
+    let input = r#"
+        main = do
+            x := 7
+            if x > 0 then 
+                1 
+            else 
+                if x < 0 then 0 - 1 else 0 end
+            end
+        end
+    "#;
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 1);
+    } else {
+        panic!("expected integer 1");
+    }
+}
+
+#[test]
+fn e2e_nested_if_negative() {
+    let input = r#"
+        main = do
+            x := 0 - 3
+            if x > 0 then 
+                1 
+            else 
+                if x < 0 then 0 - 1 else 0 end
+            end
+        end
+    "#;
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, -1);
+    } else {
+        panic!("expected integer -1");
+    }
+}
+
+#[test]
+fn e2e_nested_if_zero() {
+    let input = r#"
+        main = do
+            x := 0
+            if x > 0 then 
+                1 
+            else 
+                if x < 0 then 0 - 1 else 0 end
+            end
+        end
+    "#;
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 0);
+    } else {
+        panic!("expected integer 0");
+    }
+}
+
+#[test]
+fn e2e_if_with_logical_and() {
+    let input = r#"
+        main = do
+            x := 5
+            if x > 0 && x < 10 then 100 else 0 end
+        end
+    "#;
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 100);
+    } else {
+        panic!("expected integer 100");
+    }
+}
+
+#[test]
+fn e2e_sign_function_with_if() {
+    let input = r#"
+        sign x = if x > 0 then 1 else if x < 0 then 0 - 1 else 0 end end
+        
+        main = do
+            a := sign(10)
+            b := sign(0 - 5)
+            c := sign(0)
+            a + b + c
+        end
+    "#;
+    let result = run_program(input);
+    // 1 + (-1) + 0 = 0
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 0);
+    } else {
+        panic!("expected integer 0");
+    }
+}
+
+#[test]
+fn e2e_absolute_value_with_if() {
+    let input = r#"
+        abs x = if x < 0 then 0 - x else x end
+        
+        main = do
+            abs(0 - 42)
+        end
+    "#;
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 42);
+    } else {
+        panic!("expected integer 42");
+    }
+}
+
+#[test]
+fn e2e_max_function_with_if() {
+    let input = r#"
+        max x y = if x > y then x else y end
+        
+        main = do
+            max(10, 5)
+        end
+    "#;
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 10);
+    } else {
+        panic!("expected integer 10");
+    }
+}

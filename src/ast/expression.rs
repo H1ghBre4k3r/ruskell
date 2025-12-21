@@ -13,6 +13,7 @@ pub enum Expression<T> {
     Lambda(Lambda<T>),
     BinaryOp(BinaryOp<T>),
     UnaryOp(UnaryOp<T>),
+    IfThenElse(IfThenElse<T>),
 }
 
 #[derive(Debug, Clone)]
@@ -116,6 +117,16 @@ pub struct BinaryOp<T> {
 pub struct UnaryOp<T> {
     pub op: UnaryOpKind,
     pub operand: Box<Expression<T>>,
+    pub position: Span,
+    pub info: T,
+}
+
+/// Conditional expression (if-then-else)
+#[derive(Debug, Clone)]
+pub struct IfThenElse<T> {
+    pub condition: Box<Expression<T>>,
+    pub then_expr: Box<Expression<T>>,
+    pub else_expr: Box<Expression<T>>,
     pub position: Span,
     pub info: T,
 }
