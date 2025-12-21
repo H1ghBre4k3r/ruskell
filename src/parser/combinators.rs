@@ -265,6 +265,14 @@ pub fn expect_else() -> BoxedParser<Token> {
     token_with_error(|t| matches!(t, Token::Else(_)), "'else'")
 }
 
+pub fn expect_case() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::Case(_)), "'case'")
+}
+
+pub fn expect_of() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::Of(_)), "'of'")
+}
+
 /// Parse zero or more occurrences
 pub fn many<T: 'static>(parser: BoxedParser<T>) -> BoxedParser<Vec<T>> {
     BoxedParser::new(move |state: &mut ParseState| {

@@ -4,13 +4,15 @@
 //! - `literal`: Basic literals (identifiers, integers, strings, unit)
 //! - `expression`: Expression forms (lambdas, function calls, etc.)
 //! - `statement`: Statements (assignments, expression statements)
+//! - `pattern`: Pattern matching patterns
 
 mod expression;
 mod literal;
+mod pattern;
 mod statement;
 
 use crate::ast::expression::{Lambda, LambdaBody};
-use crate::ast::{Function, Program};
+use crate::ast::{self, Function, Program};
 use crate::lexer::Token;
 
 use super::combinators::{BoxedParser, expect_do, expect_end, expect_equals, many};
@@ -18,6 +20,7 @@ use super::state::{ParseError, ParseState, Parser};
 
 use expression::expression;
 use literal::ident;
+use pattern::pattern;
 use statement::statement;
 
 /// lambda_param := "()" | ident
@@ -59,6 +62,74 @@ fn function_params() -> BoxedParser<Vec<crate::ast::expression::LambdaParam<()>>
     })
 }
 
+/// Parse zero or more patterns for function parameters
+fn function_patterns() -> BoxedParser<Vec<ast::pattern::Pattern<()>>> {
+    BoxedParser::new(move |state: &mut ParseState| {
+        let mut patterns = Vec::new();
+
+        loop {
+            let pos = state.position();
+            match pattern().parse(state) {
+                Ok(pat) => patterns.push(pat),
+                Err(_) => {
+                    state.restore(pos);
+                    break;
+                }
+            }
+        }
+
+        Ok(patterns)
+    })
+}
+
+/// Parse a function clause with patterns
+/// function_clause := ident pattern* "=" ("do" statement* "end" | expression)
+fn function_clause() -> BoxedParser<ast::pattern::FunctionClause<()>> {
+    BoxedParser::new(move |state: &mut ParseState| {
+        let name = ident().label("function name").parse(state)?;
+        let start_pos = name.position.clone();
+        let patterns = function_patterns().parse(state)?;
+        expect_equals().parse(state)?;
+
+        // Check if it's a do-block or single expression
+        let pos = state.position();
+        if expect_do().parse(state).is_ok() {
+            let body = many(statement()).parse(state)?;
+            let end = expect_end().parse(state)?.pos();
+            Ok(ast::pattern::FunctionClause {
+                name,
+                patterns,
+                body: LambdaBody::Block(body),
+                position: start_pos.merge(&end),
+                info: (),
+            })
+        } else {
+            state.restore(pos);
+            let expr = expression().parse(state)?;
+            let expr_position = match &expr {
+                crate::ast::expression::Expression::Integer(i) => i.position.clone(),
+                crate::ast::expression::Expression::Ident(i) => i.position.clone(),
+                crate::ast::expression::Expression::Boolean(b) => b.position.clone(),
+                crate::ast::expression::Expression::BinaryOp(b) => b.position.clone(),
+                crate::ast::expression::Expression::FunctionCall(f) => f.position.clone(),
+                crate::ast::expression::Expression::Lambda(l) => l.position.clone(),
+                crate::ast::expression::Expression::String(s) => s.position.clone(),
+                crate::ast::expression::Expression::Unit(u) => u.position.clone(),
+                crate::ast::expression::Expression::UnaryOp(u) => u.position.clone(),
+                crate::ast::expression::Expression::IfThenElse(i) => i.position.clone(),
+                crate::ast::expression::Expression::Match(m) => m.position.clone(),
+            };
+            Ok(ast::pattern::FunctionClause {
+                name,
+                patterns,
+                body: LambdaBody::Expression(Box::new(expr)),
+                position: start_pos.merge(&expr_position),
+                info: (),
+            })
+        }
+    })
+}
+
 /// function := ident param* "=" ("do" statement* "end" | expression)
 pub fn function() -> BoxedParser<Function<()>> {
     BoxedParser::new(move |state: &mut ParseState| {
@@ -95,6 +166,7 @@ pub fn function() -> BoxedParser<Function<()>> {
                 crate::ast::expression::Expression::Unit(u) => u.position.clone(),
                 crate::ast::expression::Expression::UnaryOp(u) => u.position.clone(),
                 crate::ast::expression::Expression::IfThenElse(i) => i.position.clone(),
+                crate::ast::expression::Expression::Match(m) => m.position.clone(),
             };
             Ok(Function {
                 name,
@@ -112,6 +184,17 @@ pub fn function() -> BoxedParser<Function<()>> {
 /// Check if we're at the start of a function definition (ident followed by '=')
 fn at_function_start(state: &ParseState) -> bool {
     matches!(state.peek(), Some(Token::Ident(_)))
+}
+
+/// Check if a function clause can be converted to a simple function (all patterns are identifiers or unit)
+fn can_convert_to_simple_function(clause: &ast::pattern::FunctionClause<()>) -> bool {
+    clause.patterns.iter().all(|pat| {
+        matches!(
+            pat,
+            ast::pattern::Pattern::Ident(_)
+                | ast::pattern::Pattern::Literal(ast::pattern::LiteralPattern::Unit(_, _))
+        )
+    })
 }
 
 /// Skip tokens until we reach what looks like a new function definition or end of input
@@ -148,13 +231,16 @@ fn skip_to_next_function(state: &mut ParseState) {
 /// program := function*
 /// With error recovery: if a function fails to parse, skip to the next one
 pub fn program() -> BoxedParser<Program<()>> {
-    BoxedParser::new(move |state: &mut ParseState| {
-        let mut functions = Vec::new();
+    use std::collections::HashMap;
 
+    BoxedParser::new(move |state: &mut ParseState| {
+        let mut clauses = Vec::new();
+
+        // Parse all function clauses
         while state.has_next() && at_function_start(state) {
             let pos = state.position();
-            match function().parse(state) {
-                Ok(f) => functions.push(f),
+            match function_clause().parse(state) {
+                Ok(f) => clauses.push(f),
                 Err(_) => {
                     // Commit the error and try to recover
                     state.commit_furthest_error();
@@ -164,18 +250,93 @@ pub fn program() -> BoxedParser<Program<()>> {
             }
         }
 
-        // Find main function - if it doesn't exist, use the first function as a placeholder
-        // The type checker will validate that main exists and has the correct type
-        let main = functions
+        // Group clauses by function name
+        let mut grouped: HashMap<String, Vec<ast::pattern::FunctionClause<()>>> = HashMap::new();
+        for clause in clauses {
+            grouped
+                .entry(clause.name.value.clone())
+                .or_default()
+                .push(clause);
+        }
+
+        // Convert to FunctionDef
+        let mut function_defs = Vec::new();
+        for (_name, mut clauses) in grouped {
+            if clauses.len() == 1 {
+                let clause = clauses.pop().unwrap();
+                // Check if this is a simple function (all patterns are identifiers) - convert to old format
+                if can_convert_to_simple_function(&clause) {
+                    let params = clause
+                        .patterns
+                        .into_iter()
+                        .map(|pat| match pat {
+                            ast::pattern::Pattern::Ident(id) => {
+                                ast::expression::LambdaParam::Ident(id)
+                            }
+                            ast::pattern::Pattern::Literal(ast::pattern::LiteralPattern::Unit(
+                                pos,
+                                _,
+                            )) => ast::expression::LambdaParam::Unit(ast::expression::Unit {
+                                position: pos,
+                                info: (),
+                            }),
+                            _ => unreachable!(
+                                "can_convert_to_simple_function ensures all are idents or unit"
+                            ),
+                        })
+                        .collect();
+
+                    function_defs.push(ast::FunctionDef::Single(Function {
+                        name: clause.name,
+                        lambda: Lambda {
+                            params,
+                            body: clause.body,
+                            position: clause.position,
+                            info: (),
+                        },
+                    }));
+                } else {
+                    // Clause has actual pattern matching - use Multi format
+                    let name = clause.name.clone();
+                    function_defs.push(ast::FunctionDef::Multi {
+                        name,
+                        clauses: vec![clause],
+                    });
+                }
+            } else {
+                // Multiple clauses - check if all clauses can be simple functions
+                // If so, it's an error (can't have multiple simple functions with same name)
+                // Otherwise, use Multi format
+                let all_simple = clauses.iter().all(can_convert_to_simple_function);
+                if all_simple {
+                    // This is an error - multiple functions with same name and no patterns
+                    // For now, just take the first one (parser should have caught this)
+                    panic!("Multiple functions with same name but no pattern matching");
+                }
+
+                let name = clauses[0].name.clone();
+                function_defs.push(ast::FunctionDef::Multi { name, clauses });
+            }
+        }
+
+        // Find main function - if not found, use first function as placeholder
+        // The validator will catch this and report MissingMain error
+        let main = function_defs
             .iter()
-            .find(|f| f.name.value == "main")
+            .find(|f| match f {
+                ast::FunctionDef::Single(func) => func.name.value == "main",
+                ast::FunctionDef::Multi { name, .. } => name.value == "main",
+            })
             .cloned()
-            .or_else(|| functions.first().cloned())
+            .or_else(|| function_defs.first().cloned())
             .ok_or_else(|| ParseError::new("program must have at least one function"))?;
 
-        let other_functions = functions
+        let other_functions = function_defs
             .into_iter()
-            .filter(|f| f.name.value != "main")
+            .filter(|f| match f {
+                ast::FunctionDef::Single(func) => func.name.value != "main",
+                ast::FunctionDef::Multi { name, .. } => name.value != "main",
+            })
             .collect();
 
         Ok(Program {

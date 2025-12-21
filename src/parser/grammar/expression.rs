@@ -188,6 +188,87 @@ pub fn if_then_else() -> BoxedParser<Expression<()>> {
     })
 }
 
+/// case_expr := "case" expression "of" match_arm+ "end"
+/// match_arm := pattern "=>" expression
+pub fn case_expr() -> BoxedParser<Expression<()>> {
+    use crate::ast::pattern::MatchArm;
+    use crate::parser::combinators::{expect_case, expect_of};
+
+    BoxedParser::new(move |state: &mut ParseState| {
+        let start = expect_case().parse(state)?.pos();
+        let scrutinee = expression().parse(state)?;
+        expect_of().parse(state)?;
+
+        // Parse at least one match arm
+        let mut arms = Vec::new();
+        loop {
+            let pos = state.position();
+
+            // Try to parse a match arm
+            let arm_result: Result<MatchArm<()>, crate::parser::state::ParseError> = (|| {
+                let pattern = super::pattern::pattern().parse(state)?;
+                expect_arrow().parse(state)?;
+                let body = expression().parse(state)?;
+                let arm_pos = pattern_position(&pattern).merge(&expr_position(&body));
+
+                Ok(MatchArm {
+                    pattern,
+                    body,
+                    position: arm_pos,
+                    info: (),
+                })
+            })(
+            );
+
+            match arm_result {
+                Ok(arm) => arms.push(arm),
+                Err(_) => {
+                    state.restore(pos);
+                    break;
+                }
+            }
+
+            // Check if we've reached "end"
+            if matches!(state.peek(), Some(Token::End(_))) {
+                break;
+            }
+        }
+
+        if arms.is_empty() {
+            return Err(crate::parser::state::ParseError::new(
+                "case expression must have at least one arm",
+            ));
+        }
+
+        let end = expect_end().parse(state)?.pos();
+
+        Ok(Expression::Match(Box::new(crate::ast::pattern::Match {
+            scrutinee: Box::new(scrutinee),
+            arms,
+            position: start.merge(&end),
+            info: (),
+        })))
+    })
+}
+
+/// Helper to extract position from a pattern
+fn pattern_position(pattern: &crate::ast::pattern::Pattern<()>) -> lachs::Span {
+    use crate::ast::pattern::Pattern;
+    match pattern {
+        Pattern::Literal(lit) => {
+            use crate::ast::pattern::LiteralPattern;
+            match lit {
+                LiteralPattern::Integer(_, span, _) => span.clone(),
+                LiteralPattern::String(_, span, _) => span.clone(),
+                LiteralPattern::Boolean(_, span, _) => span.clone(),
+                LiteralPattern::Unit(span, _) => span.clone(),
+            }
+        }
+        Pattern::Ident(id) => id.position.clone(),
+        Pattern::Wildcard(w) => w.position.clone(),
+    }
+}
+
 /// comparison := additive (comp_op additive)?
 /// comp_op := "==" | "!=" | "<" | ">" | "<=" | ">="
 fn comparison_expr() -> BoxedParser<Expression<()>> {
@@ -244,6 +325,7 @@ fn comparison_expr() -> BoxedParser<Expression<()>> {
             Expression::Unit(u) => u.position.clone(),
             Expression::UnaryOp(u) => u.position.clone(),
             Expression::IfThenElse(i) => i.position.clone(),
+            Expression::Match(m) => m.position.clone(),
         };
 
         Ok(Expression::BinaryOp(BinaryOp {
@@ -350,7 +432,7 @@ fn logical_or_expr() -> BoxedParser<Expression<()>> {
     })
 }
 
-/// expression := lambda | if_then_else | logical_or
+/// expression := lambda | if_then_else | case_expr | logical_or
 pub fn expression() -> BoxedParser<Expression<()>> {
     BoxedParser::new(move |state: &mut ParseState| {
         let pos = state.position();
@@ -363,6 +445,12 @@ pub fn expression() -> BoxedParser<Expression<()>> {
 
         // Try if-then-else
         if let Ok(expr) = if_then_else().parse(state) {
+            return Ok(expr);
+        }
+        state.restore(pos);
+
+        // Try case expression
+        if let Ok(expr) = case_expr().parse(state) {
             return Ok(expr);
         }
         state.restore(pos);
@@ -447,6 +535,7 @@ fn multiplicative_expr() -> BoxedParser<Expression<()>> {
                 Expression::Unit(u) => u.position.clone(),
                 Expression::UnaryOp(u) => u.position.clone(),
                 Expression::IfThenElse(i) => i.position.clone(),
+                Expression::Match(m) => m.position.clone(),
             };
 
             left = Expression::BinaryOp(BinaryOp {
@@ -502,6 +591,7 @@ fn additive_expr() -> BoxedParser<Expression<()>> {
                 Expression::Unit(u) => u.position.clone(),
                 Expression::UnaryOp(u) => u.position.clone(),
                 Expression::IfThenElse(i) => i.position.clone(),
+                Expression::Match(m) => m.position.clone(),
             };
 
             left = Expression::BinaryOp(BinaryOp {
@@ -530,6 +620,7 @@ fn expr_position(expr: &Expression<()>) -> lachs::Span {
         Expression::BinaryOp(b) => b.position.clone(),
         Expression::UnaryOp(u) => u.position.clone(),
         Expression::IfThenElse(i) => i.position.clone(),
+        Expression::Match(m) => m.position.clone(),
     }
 }
 

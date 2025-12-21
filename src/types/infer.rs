@@ -447,12 +447,47 @@ impl Infer {
         let mut env = TypeEnv::empty();
         let mut errors = Vec::new();
 
-        // Infer types for all functions first (excluding main)
+        // Pass 1: Add all functions with fresh type variables (enables recursion)
+        // This allows functions to reference themselves and each other
+        let mut all_functions = Vec::new();
         for func in &program.functions {
-            match self.infer_function(&env, func) {
-                Ok((_, ty)) => {
-                    let scheme = self.generalize(&env, &ty);
-                    env = env.extend(func.name.value.clone(), scheme);
+            let fresh_var = self.fresh_var();
+            env = env.extend(
+                func.name.value.clone(),
+                TypeScheme::monomorphic(Type::Var(fresh_var)),
+            );
+            all_functions.push(func);
+        }
+        // Add main with a fresh type variable
+        let fresh_var = self.fresh_var();
+        env = env.extend(
+            program.main.name.value.clone(),
+            TypeScheme::monomorphic(Type::Var(fresh_var)),
+        );
+        all_functions.push(&program.main);
+
+        // Pass 2: Infer types for all functions with recursive environment
+        // Collect substitutions and apply them to the environment
+        let mut global_subst = Substitution::empty();
+        let mut inferred_types: HashMap<String, Type> = HashMap::new();
+        for func in all_functions {
+            // Apply accumulated substitutions to environment before inferring
+            let env_subst = env.apply_subst(&global_subst);
+
+            match self.infer_function(&env_subst, func) {
+                Ok((subst, ty)) => {
+                    // Compose substitutions
+                    global_subst = subst.compose(&global_subst);
+                    // Apply accumulated substitution to the inferred type
+                    let ty_resolved = global_subst.apply(&ty);
+                    inferred_types.insert(func.name.value.clone(), ty_resolved.clone());
+
+                    // Update the environment with the resolved type
+                    // This allows subsequent functions to see the concrete type
+                    env = env.extend(
+                        func.name.value.clone(),
+                        TypeScheme::monomorphic(ty_resolved),
+                    );
                 }
                 Err(err) => {
                     errors.push(err);
@@ -460,19 +495,22 @@ impl Infer {
             }
         }
 
-        // Infer type for main
-        match self.infer_function(&env, &program.main) {
-            Ok((_, ty)) => {
-                let scheme = self.generalize(&env, &ty);
-                env = env.extend(program.main.name.value.clone(), scheme);
+        // Pass 3: Build final environment with generalized types
+        let mut final_env = TypeEnv::empty();
+        for func in &program.functions {
+            if let Some(ty) = inferred_types.get(&func.name.value) {
+                let scheme = self.generalize(&final_env, ty);
+                final_env = final_env.extend(func.name.value.clone(), scheme);
             }
-            Err(err) => {
-                errors.push(err);
-            }
+        }
+        // Add main
+        if let Some(ty) = inferred_types.get(&program.main.name.value) {
+            let scheme = self.generalize(&final_env, ty);
+            final_env = final_env.extend(program.main.name.value.clone(), scheme);
         }
 
         if errors.is_empty() {
-            Ok(env)
+            Ok(final_env)
         } else {
             Err(errors)
         }

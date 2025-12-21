@@ -16,6 +16,12 @@ pub enum Token {
     Then,
     #[terminal("else")]
     Else,
+    #[terminal("case")]
+    Case,
+    #[terminal("of")]
+    Of,
+    #[terminal("_")]
+    Underscore,
     #[literal("[a-zA-Z'][a-zA-Z0-9']*")]
     Ident,
     #[literal("[0-9]+")]
@@ -94,6 +100,9 @@ impl Token {
             Token::If(inner) => inner.position.clone(),
             Token::Then(inner) => inner.position.clone(),
             Token::Else(inner) => inner.position.clone(),
+            Token::Case(inner) => inner.position.clone(),
+            Token::Of(inner) => inner.position.clone(),
+            Token::Underscore(inner) => inner.position.clone(),
             Token::DoubleEquals(inner) => inner.position.clone(),
             Token::NotEquals(inner) => inner.position.clone(),
             Token::LessEquals(inner) => inner.position.clone(),
@@ -132,6 +141,9 @@ impl Token {
             Token::If(_) => "'if'".to_string(),
             Token::Then(_) => "'then'".to_string(),
             Token::Else(_) => "'else'".to_string(),
+            Token::Case(_) => "'case'".to_string(),
+            Token::Of(_) => "'of'".to_string(),
+            Token::Underscore(_) => "'_'".to_string(),
             Token::DoubleEquals(_) => "'=='".to_string(),
             Token::NotEquals(_) => "'!='".to_string(),
             Token::LessEquals(_) => "'<='".to_string(),

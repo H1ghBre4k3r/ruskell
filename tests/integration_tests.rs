@@ -911,3 +911,265 @@ fn e2e_max_function_with_if() {
         panic!("expected integer 10");
     }
 }
+
+// ===== Pattern Matching Integration Tests =====
+
+#[test]
+fn test_case_with_integer_literal() {
+    let input = r#"
+        main = do
+            case 2 of
+                0 => 100
+                1 => 200
+                2 => 300
+                _ => 400
+            end
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 300);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+#[test]
+fn test_case_with_wildcard_only() {
+    let input = r#"
+        main = do
+            case 42 of
+                _ => 99
+            end
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 99);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn test_case_with_variable_binding() {
+    let input = r#"
+        main = do
+            case 10 of
+                x => x * 2
+            end
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 20);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn test_nested_case_expressions() {
+    let input = r#"
+        main = do
+            x := 1
+            y := 2
+            case x of
+                0 => 100
+                1 => case y of
+                    0 => 200
+                    2 => 300
+                    _ => 400
+                end
+                _ => 500
+            end
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 300);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn test_case_fallthrough_to_wildcard() {
+    let input = r#"
+        main = do
+            case 99 of
+                0 => 1
+                1 => 2
+                _ => 42
+            end
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 42);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn e2e_multi_clause_function_literal_match() {
+    let input = r#"
+        isZero 0 = true
+        isZero n = false
+        
+        main = do
+            result := isZero(0)
+            result
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Bool(b) = result {
+        assert_eq!(b, true);
+    } else {
+        panic!("expected boolean, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_multi_clause_function_literal_no_match() {
+    let input = r#"
+        isZero 0 = true
+        isZero n = false
+        
+        main = do
+            result := isZero(5)
+            result
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Bool(b) = result {
+        assert_eq!(b, false);
+    } else {
+        panic!("expected boolean, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_multi_clause_function_with_wildcard() {
+    let input = r#"
+        check 0 = 100
+        check 1 = 200
+        check _ = 999
+        
+        main = do
+            a := check(0)
+            b := check(1)
+            c := check(42)
+            c
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 999);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_recursive_factorial() {
+    let input = r#"
+        factorial 0 = 1
+        factorial n = n * factorial(n - 1)
+        
+        main = factorial(5)
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 120);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_recursive_fibonacci() {
+    let input = r#"
+        fib 0 = 0
+        fib 1 = 1
+        fib n = fib(n - 1) + fib(n - 2)
+        
+        main = fib(6)
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 8);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_mutual_recursion_even_odd() {
+    let input = r#"
+        even 0 = true
+        even n = odd(n - 1)
+        
+        odd 0 = false
+        odd n = even(n - 1)
+        
+        main = do
+            a := even(4)
+            b := odd(4)
+            c := even(5)
+            d := odd(5)
+            if a && !b && !c && d then 1 else 0 end
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 1);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_recursive_sum_to_n() {
+    let input = r#"
+        sumTo 0 = 0
+        sumTo n = n + sumTo(n - 1)
+        
+        main = sumTo(10)
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 55);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_recursive_power() {
+    let input = r#"
+        power n = if n == 0 then 1 else 2 * power(n - 1) end
+        
+        main = power(8)
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 256);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}

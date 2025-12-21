@@ -14,6 +14,7 @@ pub enum Expression<T> {
     BinaryOp(BinaryOp<T>),
     UnaryOp(UnaryOp<T>),
     IfThenElse(IfThenElse<T>),
+    Match(Box<super::pattern::Match<T>>),
 }
 
 #[derive(Debug, Clone)]

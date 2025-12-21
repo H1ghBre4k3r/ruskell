@@ -99,7 +99,7 @@ impl TypeEnv {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Type;
+    use crate::types::ty::Type;
 
     #[test]
     fn test_empty_env() {

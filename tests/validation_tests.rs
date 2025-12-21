@@ -1,7 +1,8 @@
 use ruskell::desugar::desugar_program;
 use ruskell::lexer::Token;
 use ruskell::parser::{ParseState, parse};
-use ruskell::types::{ValidationError, validate_and_type_check};
+use ruskell::types::validate::ValidationError;
+use ruskell::types::validate_and_type_check;
 
 /// Helper to parse, desugar and validate a program
 fn validate(input: &str) -> Result<(), Vec<ValidationError>> {

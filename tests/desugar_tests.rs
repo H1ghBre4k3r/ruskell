@@ -1,9 +1,18 @@
 //! Tests for desugaring transformations
 
+use ruskell::ast::{Function, FunctionDef};
 use ruskell::core::*;
-use ruskell::desugar::{desugar_program, erase_program};
+use ruskell::desugar::{desugar_program, erase::erase_program};
 use ruskell::lexer::Token;
 use ruskell::parser::{ParseState, parse};
+
+// Helper to unwrap FunctionDef::Single
+fn unwrap_single(def: &FunctionDef<()>) -> &Function<()> {
+    match def {
+        FunctionDef::Single(f) => f,
+        FunctionDef::Multi { .. } => panic!("expected single function, got multi-clause"),
+    }
+}
 
 fn desugar_test(input: &str) -> CoreProgram<()> {
     let tokens = Token::lex(input).expect("lexing failed");
@@ -33,7 +42,7 @@ fn desugar_and_erase_roundtrip() {
     let erased = erase_program(desugared);
 
     // Should have main with the right structure
-    assert_eq!(erased.main.name.value, "main");
+    assert_eq!(unwrap_single(&erased.main).name.value, "main");
 }
 
 #[test]
@@ -278,6 +287,98 @@ fn desugar_nested_lambdas() {
                     }
                 }
             }
+        }
+    }
+}
+
+// ===== Pattern Matching Desugaring Tests =====
+
+#[test]
+fn desugar_case_with_wildcard() {
+    let input = r#"
+        main = do
+            case 42 of
+                _ => 100
+            end
+        end
+    "#;
+    let desugared = desugar_test(input);
+
+    // Should desugar to just the body (wildcard always matches)
+    if let CoreLambdaBody::Block(stmts) = &desugared.main.lambda.body {
+        assert_eq!(stmts.len(), 1);
+    }
+}
+
+#[test]
+fn desugar_case_with_literal() {
+    let input = r#"
+        main = do
+            case 5 of
+                5 => "five"
+                _ => "other"
+            end
+        end
+    "#;
+    let desugared = desugar_test(input);
+
+    // Should desugar to if-then-else
+    if let CoreLambdaBody::Block(stmts) = &desugared.main.lambda.body {
+        if let CoreStatement::Expression(CoreExpr::IfThenElse(_)) = &stmts[0] {
+            // Good, it's an if-then-else
+        } else {
+            panic!("expected if-then-else expression");
+        }
+    }
+}
+
+#[test]
+fn desugar_case_with_variable_binding() {
+    let input = r#"
+        main = do
+            case 42 of
+                x => x + 1
+            end
+        end
+    "#;
+    let desugared = desugar_test(input);
+
+    // Should desugar to a lambda application: (\x => x + 1)(42)
+    if let CoreLambdaBody::Block(stmts) = &desugared.main.lambda.body {
+        if let CoreStatement::Expression(CoreExpr::FunctionCall(_)) = &stmts[0] {
+            // Good, it's a function call (lambda application)
+        } else {
+            panic!("expected function call (lambda application)");
+        }
+    }
+}
+
+#[test]
+fn desugar_case_multiple_literal_arms() {
+    let input = r#"
+        main = do
+            case 2 of
+                0 => "zero"
+                1 => "one"
+                2 => "two"
+                _ => "other"
+            end
+        end
+    "#;
+    let desugared = desugar_test(input);
+
+    // Should desugar to nested if-then-else
+    if let CoreLambdaBody::Block(stmts) = &desugared.main.lambda.body {
+        if let CoreStatement::Expression(CoreExpr::IfThenElse(outer)) = &stmts[0] {
+            // The else branch should be another if-then-else
+            if let CoreExpr::IfThenElse(inner) = outer.else_expr.as_ref() {
+                // And that should have another if-then-else
+                assert!(matches!(inner.else_expr.as_ref(), CoreExpr::IfThenElse(_)));
+            } else {
+                panic!("expected nested if-then-else");
+            }
+        } else {
+            panic!("expected if-then-else");
         }
     }
 }
