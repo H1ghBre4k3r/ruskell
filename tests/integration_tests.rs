@@ -911,3 +911,108 @@ fn e2e_max_function_with_if() {
         panic!("expected integer 10");
     }
 }
+
+// ===== Pattern Matching Integration Tests =====
+
+#[test]
+fn test_case_with_integer_literal() {
+    let input = r#"
+        main = do
+            case 2 of
+                0 => 100
+                1 => 200
+                2 => 300
+                _ => 400
+            end
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 300);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+#[test]
+fn test_case_with_wildcard_only() {
+    let input = r#"
+        main = do
+            case 42 of
+                _ => 99
+            end
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 99);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn test_case_with_variable_binding() {
+    let input = r#"
+        main = do
+            case 10 of
+                x => x * 2
+            end
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 20);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn test_nested_case_expressions() {
+    let input = r#"
+        main = do
+            x := 1
+            y := 2
+            case x of
+                0 => 100
+                1 => case y of
+                    0 => 200
+                    2 => 300
+                    _ => 400
+                end
+                _ => 500
+            end
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 300);
+    } else {
+        panic!("expected integer");
+    }
+}
+
+#[test]
+fn test_case_fallthrough_to_wildcard() {
+    let input = r#"
+        main = do
+            case 99 of
+                0 => 1
+                1 => 2
+                _ => 42
+            end
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 42);
+    } else {
+        panic!("expected integer");
+    }
+}

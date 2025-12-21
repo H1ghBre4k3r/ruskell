@@ -4,9 +4,7 @@
 //! - Multi-parameter lambdas → nested single-parameter lambdas
 //! - Multi-argument function calls → nested single-argument calls
 
-mod erase;
-
-pub use erase::erase_program;
+pub mod erase;
 
 use crate::ast;
 use crate::core::*;
@@ -165,10 +163,148 @@ fn desugar_expr(expr: ast::expression::Expression<()>) -> CoreExpr<()> {
             position: if_expr.position,
             info: (),
         }),
-        Expression::Match(_match_expr) => {
-            // TODO: implement match expression desugaring
-            panic!("Match expressions not yet implemented in desugaring")
+        Expression::Match(match_expr) => desugar_match(*match_expr),
+    }
+}
+
+/// Desugar a match expression to nested if-then-else
+fn desugar_match(match_expr: ast::pattern::Match<()>) -> CoreExpr<()> {
+    let scrutinee = desugar_expr(*match_expr.scrutinee);
+    let arms = match_expr.arms;
+
+    // Build the if-then-else chain from the arms
+    desugar_arms(&scrutinee, arms)
+}
+
+/// Recursively desugar a list of match arms
+fn desugar_arms(scrutinee: &CoreExpr<()>, arms: Vec<ast::pattern::MatchArm<()>>) -> CoreExpr<()> {
+    if arms.is_empty() {
+        // This shouldn't happen if parser enforces at least one arm
+        panic!("match expression with no arms");
+    }
+
+    let mut arms_iter = arms.into_iter();
+    let first_arm = arms_iter.next().unwrap();
+    let remaining: Vec<_> = arms_iter.collect();
+
+    desugar_match_arm(scrutinee, first_arm, remaining)
+}
+
+/// Desugar a single match arm, potentially with remaining arms
+fn desugar_match_arm(
+    scrutinee: &CoreExpr<()>,
+    arm: ast::pattern::MatchArm<()>,
+    remaining_arms: Vec<ast::pattern::MatchArm<()>>,
+) -> CoreExpr<()> {
+    use ast::pattern::Pattern;
+
+    let body = desugar_expr(arm.body);
+
+    match arm.pattern {
+        // Wildcard pattern: always matches, just return the body
+        Pattern::Wildcard(_) => body,
+
+        // Variable pattern: bind the scrutinee to the variable name
+        Pattern::Ident(ident) => {
+            // Create a lambda that binds the pattern variable and returns the body
+            // (\x => body)(scrutinee)
+            CoreExpr::Lambda(CoreLambda {
+                param: CoreLambdaParam::Ident(CoreIdent {
+                    value: ident.value.clone(),
+                    position: ident.position.clone(),
+                    info: (),
+                }),
+                body: CoreLambdaBody::Expression(Box::new(body)),
+                position: arm.position.clone(),
+                info: (),
+            })
+            .applied_to(scrutinee.clone())
         }
+
+        // Literal pattern: compare scrutinee to literal
+        Pattern::Literal(lit) => {
+            let condition = create_equality_check(scrutinee.clone(), lit, arm.position.clone());
+
+            // If there are remaining arms, create else branch
+            let else_branch = if remaining_arms.is_empty() {
+                // No more arms - shouldn't happen with wildcard, but create a fallback
+                CoreExpr::Unit(CoreUnit {
+                    position: arm.position.clone(),
+                    info: (),
+                })
+            } else {
+                desugar_arms(scrutinee, remaining_arms)
+            };
+
+            CoreExpr::IfThenElse(CoreIfThenElse {
+                condition: Box::new(condition),
+                then_expr: Box::new(body),
+                else_expr: Box::new(else_branch),
+                position: arm.position,
+                info: (),
+            })
+        }
+    }
+}
+
+/// Create an equality check between scrutinee and literal pattern
+fn create_equality_check(
+    scrutinee: CoreExpr<()>,
+    lit: ast::pattern::LiteralPattern<()>,
+    position: lachs::Span,
+) -> CoreExpr<()> {
+    use ast::expression::BinOpKind;
+    use ast::pattern::LiteralPattern;
+
+    let literal_expr = match lit {
+        LiteralPattern::Integer(val, pos, _) => CoreExpr::Integer(CoreInteger {
+            value: val,
+            position: pos,
+            info: (),
+        }),
+        LiteralPattern::String(val, pos, _) => CoreExpr::String(CoreString {
+            value: val,
+            position: pos,
+            info: (),
+        }),
+        LiteralPattern::Boolean(val, pos, _) => CoreExpr::Boolean(CoreBoolean {
+            value: val,
+            position: pos,
+            info: (),
+        }),
+        LiteralPattern::Unit(pos, _) => CoreExpr::Unit(CoreUnit {
+            position: pos,
+            info: (),
+        }),
+    };
+
+    CoreExpr::BinaryOp(CoreBinaryOp {
+        op: BinOpKind::Eq,
+        left: Box::new(scrutinee),
+        right: Box::new(literal_expr),
+        position,
+        info: (),
+    })
+}
+
+/// Helper to apply a lambda to an argument (for pattern bindings)
+trait AppliedTo {
+    fn applied_to(self, arg: CoreExpr<()>) -> CoreExpr<()>;
+}
+
+impl AppliedTo for CoreExpr<()> {
+    fn applied_to(self, arg: CoreExpr<()>) -> CoreExpr<()> {
+        let pos = match &self {
+            CoreExpr::Lambda(l) => l.position.clone(),
+            _ => lachs::Span::default(),
+        };
+
+        CoreExpr::FunctionCall(CoreFunctionCall {
+            func: Box::new(self),
+            arg: Box::new(arg),
+            position: pos,
+            info: (),
+        })
     }
 }
 

@@ -14,15 +14,20 @@ use parser::{ParseState, parse};
 use types::validate_and_type_check;
 
 const INPUT: &str = r#"
-add x y = x + y
-
-multiply x y = x * y
-
 main = do
-    sum := add(5, 10)
-    product := multiply(sum, 2)
-    product
+    default := 999
+    x := 5
+    result := case x of
+        0 => 17
+        1 => 19
+        2 => 41
+        n => times10(x)
+        _ => default
+    end
+    result
 end
+
+times10 x = x * 10
 "#;
 
 fn main() -> anyhow::Result<()> {

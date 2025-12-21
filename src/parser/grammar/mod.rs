@@ -4,9 +4,11 @@
 //! - `literal`: Basic literals (identifiers, integers, strings, unit)
 //! - `expression`: Expression forms (lambdas, function calls, etc.)
 //! - `statement`: Statements (assignments, expression statements)
+//! - `pattern`: Pattern matching patterns
 
 mod expression;
 mod literal;
+mod pattern;
 mod statement;
 
 use crate::ast::expression::{Lambda, LambdaBody};

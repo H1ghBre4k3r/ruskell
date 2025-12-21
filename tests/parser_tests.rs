@@ -698,3 +698,138 @@ fn parse_if_as_function_body() {
         panic!("expected expression body");
     }
 }
+
+// ===== Pattern Matching Parser Tests =====
+
+#[test]
+fn parse_case_with_integer_literals() {
+    let program = parse_program(
+        r#"
+        main = do
+            x := 5
+            result := case x of
+                0 => "zero"
+                1 => "one"
+                _ => "other"
+            end
+            result
+        end
+    "#,
+    );
+
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
+        // Second statement should be an assignment with a case expression
+        if let Statement::Assignment(assign) = &stmts[1] {
+            assert_eq!(assign.name.value, "result");
+            assert!(matches!(*assign.value, Expression::Match(_)));
+
+            if let Expression::Match(m) = &*assign.value {
+                assert_eq!(m.arms.len(), 3);
+            }
+        } else {
+            panic!("expected assignment");
+        }
+    } else {
+        panic!("expected block body");
+    }
+}
+
+#[test]
+fn parse_case_with_variable_pattern() {
+    let program = parse_program(
+        r#"
+        main = do
+            result := case 42 of
+                x => x + 1
+            end
+            result
+        end
+    "#,
+    );
+
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
+        if let Statement::Assignment(assign) = &stmts[0] {
+            if let Expression::Match(m) = &*assign.value {
+                assert_eq!(m.arms.len(), 1);
+            }
+        }
+    }
+}
+
+#[test]
+fn parse_case_with_string_patterns() {
+    let program = parse_program(
+        r#"
+        main = do
+            case "hello" of
+                "hi" => 1
+                "hello" => 2
+                _ => 3
+            end
+        end
+    "#,
+    );
+
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
+        if let Statement::Expression(Expression::Match(m)) = &stmts[0] {
+            assert_eq!(m.arms.len(), 3);
+        } else {
+            panic!("expected case expression");
+        }
+    } else {
+        panic!("expected block body");
+    }
+}
+
+#[test]
+fn parse_case_with_boolean_patterns() {
+    let program = parse_program(
+        r#"
+        main = do
+            case true of
+                true => 1
+                false => 0
+            end
+        end
+    "#,
+    );
+
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
+        if let Statement::Expression(Expression::Match(m)) = &stmts[0] {
+            assert_eq!(m.arms.len(), 2);
+        } else {
+            panic!("expected case expression");
+        }
+    } else {
+        panic!("expected block body");
+    }
+}
+
+#[test]
+fn parse_nested_case() {
+    let program = parse_program(
+        r#"
+        main = do
+            case 1 of
+                0 => case 2 of
+                    0 => 10
+                    _ => 20
+                end
+                _ => 30
+            end
+        end
+    "#,
+    );
+
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
+        if let Statement::Expression(Expression::Match(outer)) = &stmts[0] {
+            assert_eq!(outer.arms.len(), 2);
+            // First arm's body should be another case
+            if let Expression::Match(inner) = &outer.arms[0].body {
+                assert_eq!(inner.arms.len(), 2);
+            } else {
+                panic!("expected nested case");
+            }
+        }
+    }
+}
