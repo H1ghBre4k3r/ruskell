@@ -244,6 +244,7 @@ fn comparison_expr() -> BoxedParser<Expression<()>> {
             Expression::Unit(u) => u.position.clone(),
             Expression::UnaryOp(u) => u.position.clone(),
             Expression::IfThenElse(i) => i.position.clone(),
+            Expression::Match(m) => m.position.clone(),
         };
 
         Ok(Expression::BinaryOp(BinaryOp {
@@ -447,6 +448,7 @@ fn multiplicative_expr() -> BoxedParser<Expression<()>> {
                 Expression::Unit(u) => u.position.clone(),
                 Expression::UnaryOp(u) => u.position.clone(),
                 Expression::IfThenElse(i) => i.position.clone(),
+                Expression::Match(m) => m.position.clone(),
             };
 
             left = Expression::BinaryOp(BinaryOp {
@@ -502,6 +504,7 @@ fn additive_expr() -> BoxedParser<Expression<()>> {
                 Expression::Unit(u) => u.position.clone(),
                 Expression::UnaryOp(u) => u.position.clone(),
                 Expression::IfThenElse(i) => i.position.clone(),
+                Expression::Match(m) => m.position.clone(),
             };
 
             left = Expression::BinaryOp(BinaryOp {
@@ -530,6 +533,7 @@ fn expr_position(expr: &Expression<()>) -> lachs::Span {
         Expression::BinaryOp(b) => b.position.clone(),
         Expression::UnaryOp(u) => u.position.clone(),
         Expression::IfThenElse(i) => i.position.clone(),
+        Expression::Match(m) => m.position.clone(),
     }
 }
 

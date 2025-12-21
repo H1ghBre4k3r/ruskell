@@ -1,5 +1,6 @@
 use ruskell::ast::expression::{Expression, LambdaBody};
 use ruskell::ast::statement::Statement;
+use ruskell::ast::{Function, FunctionDef};
 use ruskell::lexer::Token;
 use ruskell::parser::{ParseState, parse};
 
@@ -13,13 +14,22 @@ fn parse_program(input: &str) -> ruskell::ParsedProgram {
     program.expect("parsing failed: no program")
 }
 
+// Helper to unwrap FunctionDef::Single
+fn unwrap_single(def: &FunctionDef<()>) -> &Function<()> {
+    match def {
+        FunctionDef::Single(f) => f,
+        FunctionDef::Multi { .. } => panic!("expected single function, got multi-clause"),
+    }
+}
+
 #[test]
 fn parse_empty_main() {
     let program = parse_program("main = do end");
-    assert_eq!(program.main.name.value, "main");
+    let main = unwrap_single(&program.main);
+    assert_eq!(main.name.value, "main");
     assert!(program.functions.is_empty());
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &main.lambda.body {
         assert!(stmts.is_empty());
     } else {
         panic!("expected block body");
@@ -30,7 +40,7 @@ fn parse_empty_main() {
 fn parse_main_with_integer() {
     let program = parse_program("main = do 42 end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert_eq!(stmts.len(), 1);
         if let Statement::Expression(Expression::Integer(i)) = &stmts[0] {
             assert_eq!(i.value, 42);
@@ -46,7 +56,7 @@ fn parse_main_with_integer() {
 fn parse_assignment() {
     let program = parse_program("main = do x := 42 end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert_eq!(stmts.len(), 1);
         if let Statement::Assignment(a) = &stmts[0] {
             assert_eq!(a.name.value, "x");
@@ -67,7 +77,7 @@ fn parse_assignment() {
 fn parse_multiple_statements() {
     let program = parse_program("main = do x := 1 y := 2 x end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert_eq!(stmts.len(), 3);
         assert!(matches!(&stmts[0], Statement::Assignment(_)));
         assert!(matches!(&stmts[1], Statement::Assignment(_)));
@@ -84,7 +94,7 @@ fn parse_multiple_statements() {
 fn parse_lambda_expression() {
     let program = parse_program(r#"main = do f := \x => x end"#);
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert_eq!(stmts.len(), 1);
         if let Statement::Assignment(a) = &stmts[0] {
             assert_eq!(a.name.value, "f");
@@ -101,7 +111,7 @@ fn parse_lambda_expression() {
 fn parse_lambda_with_block_body() {
     let program = parse_program(r#"main = do f := \x => do x end end"#);
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         if let Statement::Assignment(a) = &stmts[0] {
             if let Expression::Lambda(l) = a.value.as_ref() {
                 assert!(matches!(&l.body, LambdaBody::Block(_)));
@@ -120,7 +130,7 @@ fn parse_lambda_with_block_body() {
 fn parse_lambda_with_multiple_params() {
     let program = parse_program(r#"main = do f := \x, y => x end"#);
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         if let Statement::Assignment(a) = &stmts[0] {
             if let Expression::Lambda(l) = a.value.as_ref() {
                 assert_eq!(l.params.len(), 2);
@@ -139,7 +149,7 @@ fn parse_lambda_with_multiple_params() {
 fn parse_function_call_no_args() {
     let program = parse_program("main = do foo() end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         if let Statement::Expression(Expression::FunctionCall(c)) = &stmts[0] {
             if let Expression::Ident(i) = c.func.as_ref() {
                 assert_eq!(i.value, "foo");
@@ -157,7 +167,7 @@ fn parse_function_call_no_args() {
 fn parse_function_call_with_args() {
     let program = parse_program("main = do foo(1, 2, 3) end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         if let Statement::Expression(Expression::FunctionCall(c)) = &stmts[0] {
             assert_eq!(c.args.len(), 3);
         } else {
@@ -172,7 +182,7 @@ fn parse_function_call_with_args() {
 fn parse_unit_literal() {
     let program = parse_program("main = do () end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert!(matches!(
             &stmts[0],
             Statement::Expression(Expression::Unit(_))
@@ -185,28 +195,28 @@ fn parse_unit_literal() {
 #[test]
 fn parse_multiple_functions() {
     let program = parse_program("main = do end helper = do end");
-    assert_eq!(program.main.name.value, "main");
+    assert_eq!(unwrap_single(&program.main).name.value, "main");
     assert_eq!(program.functions.len(), 1);
-    assert_eq!(program.functions[0].name.value, "helper");
+    assert_eq!(unwrap_single(&program.functions[0]).name.value, "helper");
 }
 
 #[test]
 fn parse_binary_addition() {
     let program = parse_program("main = do 1 + 2 end");
-    assert_eq!(program.main.name.value, "main");
+    assert_eq!(unwrap_single(&program.main).name.value, "main");
 }
 
 #[test]
 fn parse_binary_precedence() {
     // Should parse as 1 + (2 * 3)
     let program = parse_program("main = do 1 + 2 * 3 end");
-    assert_eq!(program.main.name.value, "main");
+    assert_eq!(unwrap_single(&program.main).name.value, "main");
 }
 
 #[test]
 fn parse_binary_with_parens() {
     let program = parse_program("main = do (1 + 2) * 3 end");
-    assert_eq!(program.main.name.value, "main");
+    assert_eq!(unwrap_single(&program.main).name.value, "main");
 }
 
 #[test]
@@ -216,18 +226,19 @@ fn parse_function_with_single_param() {
         main = do end
     "#;
 
-    let lexed = Token::lex(input).unwrap();
+    let lexed = Token::lex(input).map(unwrap_single).unwrap();
     let mut state = ParseState::new(lexed);
     let (program, errors) = parse(&mut state);
 
     assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     assert!(program.is_some());
 
-    let prog = program.unwrap();
+    let prog = program.map(unwrap_single).unwrap();
     let add_fn = prog
         .functions
         .iter()
-        .find(|f| f.name.value == "add")
+        .find(|f| unwrap_single(f).name.value == "add")
+        .map(unwrap_single)
         .unwrap();
     assert_eq!(add_fn.lambda.params.len(), 1);
 }
@@ -239,18 +250,19 @@ fn parse_function_with_multiple_params() {
         main = do end
     "#;
 
-    let lexed = Token::lex(input).unwrap();
+    let lexed = Token::lex(input).map(unwrap_single).unwrap();
     let mut state = ParseState::new(lexed);
     let (program, errors) = parse(&mut state);
 
     assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     assert!(program.is_some());
 
-    let prog = program.unwrap();
+    let prog = program.map(unwrap_single).unwrap();
     let add_fn = prog
         .functions
         .iter()
-        .find(|f| f.name.value == "add")
+        .find(|f| unwrap_single(f).name.value == "add")
+        .map(unwrap_single)
         .unwrap();
     assert_eq!(add_fn.lambda.params.len(), 2);
 }
@@ -262,18 +274,19 @@ fn parse_function_with_unit_param() {
         main = do end
     "#;
 
-    let lexed = Token::lex(input).unwrap();
+    let lexed = Token::lex(input).map(unwrap_single).unwrap();
     let mut state = ParseState::new(lexed);
     let (program, errors) = parse(&mut state);
 
     assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     assert!(program.is_some());
 
-    let prog = program.unwrap();
+    let prog = program.map(unwrap_single).unwrap();
     let ignore_fn = prog
         .functions
         .iter()
-        .find(|f| f.name.value == "ignore")
+        .find(|f| unwrap_single(f).name.value == "ignore")
+        .map(unwrap_single)
         .unwrap();
     assert_eq!(ignore_fn.lambda.params.len(), 1);
 }
@@ -288,18 +301,19 @@ fn parse_function_no_params_backwards_compat() {
         main = do end
     "#;
 
-    let lexed = Token::lex(input).unwrap();
+    let lexed = Token::lex(input).map(unwrap_single).unwrap();
     let mut state = ParseState::new(lexed);
     let (program, errors) = parse(&mut state);
 
     assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     assert!(program.is_some());
 
-    let prog = program.unwrap();
+    let prog = program.map(unwrap_single).unwrap();
     let noparams_fn = prog
         .functions
         .iter()
-        .find(|f| f.name.value == "noparams")
+        .find(|f| unwrap_single(f).name.value == "noparams")
+        .map(unwrap_single)
         .unwrap();
     assert_eq!(noparams_fn.lambda.params.len(), 0);
 }
@@ -311,18 +325,19 @@ fn parse_function_single_expression_body() {
         main = do end
     "#;
 
-    let lexed = Token::lex(input).unwrap();
+    let lexed = Token::lex(input).map(unwrap_single).unwrap();
     let mut state = ParseState::new(lexed);
     let (program, errors) = parse(&mut state);
 
     assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     assert!(program.is_some());
 
-    let prog = program.unwrap();
+    let prog = program.map(unwrap_single).unwrap();
     let double_fn = prog
         .functions
         .iter()
-        .find(|f| f.name.value == "double")
+        .find(|f| unwrap_single(f).name.value == "double")
+        .map(unwrap_single)
         .unwrap();
     assert_eq!(double_fn.lambda.params.len(), 1);
     assert!(matches!(double_fn.lambda.body, LambdaBody::Expression(_)));
@@ -338,18 +353,19 @@ fn parse_function_do_block_body() {
         main = do end
     "#;
 
-    let lexed = Token::lex(input).unwrap();
+    let lexed = Token::lex(input).map(unwrap_single).unwrap();
     let mut state = ParseState::new(lexed);
     let (program, errors) = parse(&mut state);
 
     assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     assert!(program.is_some());
 
-    let prog = program.unwrap();
+    let prog = program.map(unwrap_single).unwrap();
     let compute_fn = prog
         .functions
         .iter()
-        .find(|f| f.name.value == "compute")
+        .find(|f| unwrap_single(f).name.value == "compute")
+        .map(unwrap_single)
         .unwrap();
     assert_eq!(compute_fn.lambda.params.len(), 2);
     assert!(matches!(compute_fn.lambda.body, LambdaBody::Block(_)));
@@ -361,7 +377,7 @@ fn parse_function_do_block_body() {
 fn parse_boolean_true() {
     let program = parse_program("main = do true end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert_eq!(stmts.len(), 1);
         if let Statement::Expression(Expression::Boolean(b)) = &stmts[0] {
             assert!(b.value);
@@ -377,7 +393,7 @@ fn parse_boolean_true() {
 fn parse_boolean_false() {
     let program = parse_program("main = do false end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert_eq!(stmts.len(), 1);
         if let Statement::Expression(Expression::Boolean(b)) = &stmts[0] {
             assert!(!b.value);
@@ -393,7 +409,7 @@ fn parse_boolean_false() {
 fn parse_comparison_equal() {
     let program = parse_program("main = do 5 == 10 end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert_eq!(stmts.len(), 1);
         if let Statement::Expression(Expression::BinaryOp(binop)) = &stmts[0] {
             assert!(matches!(binop.op, ruskell::ast::expression::BinOpKind::Eq));
@@ -410,7 +426,7 @@ fn parse_comparison_with_precedence() {
     // 2 + 3 < 10 should parse with + binding tighter than <
     let program = parse_program("main = do 2 + 3 < 10 end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert_eq!(stmts.len(), 1);
         if let Statement::Expression(Expression::BinaryOp(binop)) = &stmts[0] {
             // The outer operation should be <
@@ -447,7 +463,7 @@ fn parse_all_comparison_operators() {
 
     for (input, expected_op) in tests {
         let program = parse_program(input);
-        if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+        if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
             if let Statement::Expression(Expression::BinaryOp(binop)) = &stmts[0] {
                 assert_eq!(binop.op, expected_op);
             } else {
@@ -465,7 +481,7 @@ fn parse_all_comparison_operators() {
 fn parse_logical_not() {
     let program = parse_program("main = do !true end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert_eq!(stmts.len(), 1);
         if let Statement::Expression(Expression::UnaryOp(unop)) = &stmts[0] {
             assert!(matches!(
@@ -486,7 +502,7 @@ fn parse_logical_not() {
 fn parse_logical_and() {
     let program = parse_program("main = do true && false end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert_eq!(stmts.len(), 1);
         if let Statement::Expression(Expression::BinaryOp(binop)) = &stmts[0] {
             assert!(matches!(binop.op, ruskell::ast::expression::BinOpKind::And));
@@ -502,7 +518,7 @@ fn parse_logical_and() {
 fn parse_logical_or() {
     let program = parse_program("main = do true || false end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert_eq!(stmts.len(), 1);
         if let Statement::Expression(Expression::BinaryOp(binop)) = &stmts[0] {
             assert!(matches!(binop.op, ruskell::ast::expression::BinOpKind::Or));
@@ -519,7 +535,7 @@ fn parse_logical_precedence_not_and() {
     // !x && y should parse as (!x) && y
     let program = parse_program("main = do !true && false end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert_eq!(stmts.len(), 1);
         if let Statement::Expression(Expression::BinaryOp(binop)) = &stmts[0] {
             // Outer operation should be &&
@@ -541,7 +557,7 @@ fn parse_logical_precedence_and_or() {
     // x && y || z should parse as (x && y) || z
     let program = parse_program("main = do true && false || true end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert_eq!(stmts.len(), 1);
         if let Statement::Expression(Expression::BinaryOp(binop)) = &stmts[0] {
             // Outer operation should be ||
@@ -568,7 +584,7 @@ fn parse_logical_with_comparison() {
     // x < 5 && y > 10 should parse as (x < 5) && (y > 10)
     let program = parse_program("main = do x := 1 y := 2 x < 5 && y > 10 end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         // Last statement should be the logical expression
         if let Statement::Expression(Expression::BinaryOp(binop)) = &stmts[2] {
             // Outer operation should be &&
@@ -589,7 +605,7 @@ fn parse_double_negation() {
     // !!x should parse as !(!x)
     let program = parse_program("main = do !!true end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert_eq!(stmts.len(), 1);
         if let Statement::Expression(Expression::UnaryOp(unop)) = &stmts[0] {
             // Outer operation should be !
@@ -611,7 +627,7 @@ fn parse_double_negation() {
 fn parse_simple_if_then_else() {
     let program = parse_program("main = do if true then 1 else 2 end end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert_eq!(stmts.len(), 1);
         if let Statement::Expression(Expression::IfThenElse(if_expr)) = &stmts[0] {
             // Check condition is boolean
@@ -640,7 +656,7 @@ fn parse_simple_if_then_else() {
 fn parse_if_with_comparison() {
     let program = parse_program("main = do if x > 0 then 1 else 0 - 1 end end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert_eq!(stmts.len(), 1);
         if let Statement::Expression(Expression::IfThenElse(if_expr)) = &stmts[0] {
             // Check condition is a comparison
@@ -658,7 +674,7 @@ fn parse_nested_if() {
     let program =
         parse_program("main = do if x > 0 then 1 else if x < 0 then 0 - 1 else 0 end end end");
 
-    if let LambdaBody::Block(stmts) = &program.main.lambda.body {
+    if let LambdaBody::Block(stmts) = &unwrap_single(&program.main).lambda.body {
         assert_eq!(stmts.len(), 1);
         if let Statement::Expression(Expression::IfThenElse(outer_if)) = &stmts[0] {
             // Check else branch contains another if
@@ -676,7 +692,7 @@ fn parse_if_as_function_body() {
     let program = parse_program("main x = if x > 0 then 1 else 0 - 1 end");
 
     // Function should have a single-expression body with if-then-else
-    if let LambdaBody::Expression(expr) = &program.main.lambda.body {
+    if let LambdaBody::Expression(expr) = &unwrap_single(&program.main).lambda.body {
         assert!(matches!(**expr, Expression::IfThenElse(_)));
     } else {
         panic!("expected expression body");

@@ -14,12 +14,25 @@ use crate::core::*;
 /// Desugar a complete program
 pub fn desugar_program(program: ast::Program<()>) -> CoreProgram<()> {
     CoreProgram {
-        main: desugar_function(program.main),
+        main: desugar_function_def(program.main),
         functions: program
             .functions
             .into_iter()
-            .map(desugar_function)
+            .map(desugar_function_def)
             .collect(),
+    }
+}
+
+fn desugar_function_def(def: ast::FunctionDef<()>) -> CoreFunction<()> {
+    match def {
+        ast::FunctionDef::Single(func) => desugar_function(func),
+        ast::FunctionDef::Multi {
+            name: _,
+            clauses: _,
+        } => {
+            // TODO: implement multi-clause desugaring
+            panic!("Multi-clause functions not yet implemented in desugaring")
+        }
     }
 }
 
@@ -152,6 +165,10 @@ fn desugar_expr(expr: ast::expression::Expression<()>) -> CoreExpr<()> {
             position: if_expr.position,
             info: (),
         }),
+        Expression::Match(_match_expr) => {
+            // TODO: implement match expression desugaring
+            panic!("Match expressions not yet implemented in desugaring")
+        }
     }
 }
 

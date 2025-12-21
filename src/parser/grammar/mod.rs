@@ -10,7 +10,7 @@ mod literal;
 mod statement;
 
 use crate::ast::expression::{Lambda, LambdaBody};
-use crate::ast::{Function, Program};
+use crate::ast::{self, Function, Program};
 use crate::lexer::Token;
 
 use super::combinators::{BoxedParser, expect_do, expect_end, expect_equals, many};
@@ -95,6 +95,7 @@ pub fn function() -> BoxedParser<Function<()>> {
                 crate::ast::expression::Expression::Unit(u) => u.position.clone(),
                 crate::ast::expression::Expression::UnaryOp(u) => u.position.clone(),
                 crate::ast::expression::Expression::IfThenElse(i) => i.position.clone(),
+                crate::ast::expression::Expression::Match(m) => m.position.clone(),
             };
             Ok(Function {
                 name,
@@ -170,12 +171,14 @@ pub fn program() -> BoxedParser<Program<()>> {
             .iter()
             .find(|f| f.name.value == "main")
             .cloned()
-            .or_else(|| functions.first().cloned())
+            .map(ast::FunctionDef::Single)
+            .or_else(|| functions.first().cloned().map(ast::FunctionDef::Single))
             .ok_or_else(|| ParseError::new("program must have at least one function"))?;
 
         let other_functions = functions
             .into_iter()
             .filter(|f| f.name.value != "main")
+            .map(ast::FunctionDef::Single)
             .collect();
 
         Ok(Program {

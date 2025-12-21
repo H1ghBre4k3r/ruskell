@@ -9,8 +9,12 @@ use crate::core::*;
 
 pub fn erase_program(program: CoreProgram<()>) -> ast::Program<()> {
     ast::Program {
-        main: erase_function(program.main),
-        functions: program.functions.into_iter().map(erase_function).collect(),
+        main: ast::FunctionDef::Single(erase_function(program.main)),
+        functions: program
+            .functions
+            .into_iter()
+            .map(|f| ast::FunctionDef::Single(erase_function(f)))
+            .collect(),
     }
 }
 
