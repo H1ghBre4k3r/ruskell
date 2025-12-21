@@ -125,6 +125,11 @@ fn desugar_expr(expr: ast::expression::Expression<()>) -> CoreExpr<()> {
             position: s.position,
             info: (),
         }),
+        Expression::Boolean(b) => CoreExpr::Boolean(CoreBoolean {
+            value: b.value,
+            position: b.position,
+            info: (),
+        }),
         Expression::Lambda(lambda) => CoreExpr::Lambda(desugar_lambda(lambda)),
         Expression::FunctionCall(call) => desugar_function_call(call),
         Expression::BinaryOp(binop) => CoreExpr::BinaryOp(CoreBinaryOp {
@@ -132,6 +137,19 @@ fn desugar_expr(expr: ast::expression::Expression<()>) -> CoreExpr<()> {
             left: Box::new(desugar_expr(*binop.left)),
             right: Box::new(desugar_expr(*binop.right)),
             position: binop.position,
+            info: (),
+        }),
+        Expression::UnaryOp(unop) => CoreExpr::UnaryOp(CoreUnaryOp {
+            op: unop.op,
+            operand: Box::new(desugar_expr(*unop.operand)),
+            position: unop.position,
+            info: (),
+        }),
+        Expression::IfThenElse(if_expr) => CoreExpr::IfThenElse(CoreIfThenElse {
+            condition: Box::new(desugar_expr(*if_expr.condition)),
+            then_expr: Box::new(desugar_expr(*if_expr.then_expr)),
+            else_expr: Box::new(desugar_expr(*if_expr.else_expr)),
+            position: if_expr.position,
             info: (),
         }),
     }

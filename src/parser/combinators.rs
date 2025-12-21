@@ -209,6 +209,62 @@ pub fn expect_rparen() -> BoxedParser<Token> {
     token_with_error(|t| matches!(t, Token::RParen(_)), "')'")
 }
 
+pub fn expect_true() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::True(_)), "'true'")
+}
+
+pub fn expect_false() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::False(_)), "'false'")
+}
+
+pub fn expect_double_equals() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::DoubleEquals(_)), "'=='")
+}
+
+pub fn expect_not_equals() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::NotEquals(_)), "'!='")
+}
+
+pub fn expect_less_than() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::LessThan(_)), "'<'")
+}
+
+pub fn expect_greater_than() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::GreaterThan(_)), "'>'")
+}
+
+pub fn expect_less_equals() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::LessEquals(_)), "'<='")
+}
+
+pub fn expect_greater_equals() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::GreaterEquals(_)), "'>='")
+}
+
+pub fn expect_logical_and() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::LogicalAnd(_)), "'&&'")
+}
+
+pub fn expect_logical_or() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::LogicalOr(_)), "'||'")
+}
+
+pub fn expect_logical_not() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::LogicalNot(_)), "'!'")
+}
+
+pub fn expect_if() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::If(_)), "'if'")
+}
+
+pub fn expect_then() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::Then(_)), "'then'")
+}
+
+pub fn expect_else() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::Else(_)), "'else'")
+}
+
 /// Parse zero or more occurrences
 pub fn many<T: 'static>(parser: BoxedParser<T>) -> BoxedParser<Vec<T>> {
     BoxedParser::new(move |state: &mut ParseState| {

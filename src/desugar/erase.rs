@@ -70,6 +70,11 @@ fn erase_expr(expr: CoreExpr<()>) -> ast::expression::Expression<()> {
             position: s.position,
             info: (),
         }),
+        CoreExpr::Boolean(b) => Expression::Boolean(ast::expression::Boolean {
+            value: b.value,
+            position: b.position,
+            info: (),
+        }),
         CoreExpr::Lambda(lambda) => Expression::Lambda(erase_lambda(lambda)),
         CoreExpr::FunctionCall(call) => Expression::FunctionCall(ast::expression::FunctionCall {
             func: Box::new(erase_expr(*call.func)),
@@ -82,6 +87,19 @@ fn erase_expr(expr: CoreExpr<()>) -> ast::expression::Expression<()> {
             left: Box::new(erase_expr(*binop.left)),
             right: Box::new(erase_expr(*binop.right)),
             position: binop.position,
+            info: (),
+        }),
+        CoreExpr::UnaryOp(unop) => Expression::UnaryOp(ast::expression::UnaryOp {
+            op: unop.op,
+            operand: Box::new(erase_expr(*unop.operand)),
+            position: unop.position,
+            info: (),
+        }),
+        CoreExpr::IfThenElse(if_expr) => Expression::IfThenElse(ast::expression::IfThenElse {
+            condition: Box::new(erase_expr(*if_expr.condition)),
+            then_expr: Box::new(erase_expr(*if_expr.then_expr)),
+            else_expr: Box::new(erase_expr(*if_expr.else_expr)),
+            position: if_expr.position,
             info: (),
         }),
     }

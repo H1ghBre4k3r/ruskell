@@ -8,9 +8,12 @@ pub enum Expression<T> {
     Ident(Ident<T>),
     Integer(Integer<T>),
     String(StringLiteral<T>),
+    Boolean(Boolean<T>),
     FunctionCall(FunctionCall<T>),
     Lambda(Lambda<T>),
     BinaryOp(BinaryOp<T>),
+    UnaryOp(UnaryOp<T>),
+    IfThenElse(IfThenElse<T>),
 }
 
 #[derive(Debug, Clone)]
@@ -47,6 +50,13 @@ pub struct StringLiteral<T> {
 }
 
 #[derive(Debug, Clone)]
+pub struct Boolean<T> {
+    pub value: bool,
+    pub position: Span,
+    pub info: T,
+}
+
+#[derive(Debug, Clone)]
 pub struct FunctionCall<T> {
     pub func: Box<Expression<T>>,
     pub args: Vec<Expression<T>>,
@@ -76,6 +86,20 @@ pub enum BinOpKind {
     Sub,
     Mul,
     Div,
+    Eq,
+    NotEq,
+    Lt,
+    Gt,
+    LtEq,
+    GtEq,
+    And,
+    Or,
+}
+
+/// Unary operator kinds
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnaryOpKind {
+    Not,
 }
 
 /// Binary operation expression
@@ -84,6 +108,25 @@ pub struct BinaryOp<T> {
     pub op: BinOpKind,
     pub left: Box<Expression<T>>,
     pub right: Box<Expression<T>>,
+    pub position: Span,
+    pub info: T,
+}
+
+/// Unary operation expression
+#[derive(Debug, Clone)]
+pub struct UnaryOp<T> {
+    pub op: UnaryOpKind,
+    pub operand: Box<Expression<T>>,
+    pub position: Span,
+    pub info: T,
+}
+
+/// Conditional expression (if-then-else)
+#[derive(Debug, Clone)]
+pub struct IfThenElse<T> {
+    pub condition: Box<Expression<T>>,
+    pub then_expr: Box<Expression<T>>,
+    pub else_expr: Box<Expression<T>>,
     pub position: Span,
     pub info: T,
 }

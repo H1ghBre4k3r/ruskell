@@ -6,6 +6,16 @@ pub enum Token {
     Do,
     #[terminal("end")]
     End,
+    #[terminal("true")]
+    True,
+    #[terminal("false")]
+    False,
+    #[terminal("if")]
+    If,
+    #[terminal("then")]
+    Then,
+    #[terminal("else")]
+    Else,
     #[literal("[a-zA-Z'][a-zA-Z0-9']*")]
     Ident,
     #[literal("[0-9]+")]
@@ -38,6 +48,24 @@ pub enum Token {
     Star,
     #[terminal("/")]
     Slash,
+    #[terminal("==")]
+    DoubleEquals,
+    #[terminal("!=")]
+    NotEquals,
+    #[terminal("<=")]
+    LessEquals,
+    #[terminal(">=")]
+    GreaterEquals,
+    #[terminal("<")]
+    LessThan,
+    #[terminal(">")]
+    GreaterThan,
+    #[terminal("&&")]
+    LogicalAnd,
+    #[terminal("||")]
+    LogicalOr,
+    #[terminal("!")]
+    LogicalNot,
 }
 
 impl Token {
@@ -61,6 +89,20 @@ impl Token {
             Token::Minus(inner) => inner.position.clone(),
             Token::Star(inner) => inner.position.clone(),
             Token::Slash(inner) => inner.position.clone(),
+            Token::True(inner) => inner.position.clone(),
+            Token::False(inner) => inner.position.clone(),
+            Token::If(inner) => inner.position.clone(),
+            Token::Then(inner) => inner.position.clone(),
+            Token::Else(inner) => inner.position.clone(),
+            Token::DoubleEquals(inner) => inner.position.clone(),
+            Token::NotEquals(inner) => inner.position.clone(),
+            Token::LessEquals(inner) => inner.position.clone(),
+            Token::GreaterEquals(inner) => inner.position.clone(),
+            Token::LessThan(inner) => inner.position.clone(),
+            Token::GreaterThan(inner) => inner.position.clone(),
+            Token::LogicalAnd(inner) => inner.position.clone(),
+            Token::LogicalOr(inner) => inner.position.clone(),
+            Token::LogicalNot(inner) => inner.position.clone(),
         }
     }
 
@@ -85,6 +127,20 @@ impl Token {
             Token::Minus(_) => "'-'".to_string(),
             Token::Star(_) => "'*'".to_string(),
             Token::Slash(_) => "'/'".to_string(),
+            Token::True(_) => "'true'".to_string(),
+            Token::False(_) => "'false'".to_string(),
+            Token::If(_) => "'if'".to_string(),
+            Token::Then(_) => "'then'".to_string(),
+            Token::Else(_) => "'else'".to_string(),
+            Token::DoubleEquals(_) => "'=='".to_string(),
+            Token::NotEquals(_) => "'!='".to_string(),
+            Token::LessEquals(_) => "'<='".to_string(),
+            Token::GreaterEquals(_) => "'>='".to_string(),
+            Token::LessThan(_) => "'<'".to_string(),
+            Token::GreaterThan(_) => "'>'".to_string(),
+            Token::LogicalAnd(_) => "'&&'".to_string(),
+            Token::LogicalOr(_) => "'||'".to_string(),
+            Token::LogicalNot(_) => "'!'".to_string(),
         }
     }
 }

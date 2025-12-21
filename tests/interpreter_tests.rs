@@ -105,3 +105,65 @@ fn eval_empty_block_returns_unit() {
     let result = eval_program("main = do end");
     assert!(matches!(result, RValue::Unit));
 }
+
+#[test]
+fn eval_if_true_branch() {
+    let result = eval_program("main = do if true then 42 else 0 end end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 42);
+    } else {
+        panic!("expected integer 42");
+    }
+}
+
+#[test]
+fn eval_if_false_branch() {
+    let result = eval_program("main = do if false then 42 else 99 end end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 99);
+    } else {
+        panic!("expected integer 99");
+    }
+}
+
+#[test]
+fn eval_if_with_comparison() {
+    let result = eval_program("main = do x := 5\nif x > 0 then 1 else 0 - 1 end end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 1);
+    } else {
+        panic!("expected integer 1");
+    }
+}
+
+#[test]
+fn eval_nested_if() {
+    let result = eval_program(
+        "main = do x := 0 - 3\nif x > 0 then 1 else if x < 0 then 0 - 1 else 0 end end end",
+    );
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, -1);
+    } else {
+        panic!("expected integer -1");
+    }
+}
+
+#[test]
+fn eval_if_with_logical_and() {
+    let result = eval_program("main = do x := 5\nif x > 0 && x < 10 then 1 else 0 end end");
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 1);
+    } else {
+        panic!("expected integer 1");
+    }
+}
+
+#[test]
+fn eval_if_returns_bool() {
+    let result = eval_program("main = do if true then true else false end end");
+    if let RValue::Bool(b) = result {
+        assert!(b);
+    } else {
+        panic!("expected boolean true");
+    }
+}
