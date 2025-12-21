@@ -29,11 +29,17 @@ enum Command {
     Run {
         /// Path to .rsk file
         file: String,
+        /// Enable verbose output
+        #[arg(short, long)]
+        verbose: bool,
     },
     /// Type check a program without running it
     Check {
         /// Path to .rsk file
         file: String,
+        /// Enable verbose output
+        #[arg(short, long)]
+        verbose: bool,
     },
     /// Format a Ruskell source file (not yet implemented)
     Fmt {
@@ -59,8 +65,8 @@ fn main() {
     let cli = Cli::parse();
 
     let exit_code = match cli.command {
-        Command::Run { file } => cmd_run(&file),
-        Command::Check { file } => cmd_check(&file),
+        Command::Run { file, verbose } => cmd_run(&file, verbose),
+        Command::Check { file, verbose } => cmd_check(&file, verbose),
         Command::Fmt { file, in_place } => cmd_fmt(&file, in_place),
         Command::Repl => cmd_repl(),
         Command::Build { file, output } => cmd_build(&file, output),
@@ -73,7 +79,7 @@ fn read_source_file(path: &str) -> Result<String, String> {
     fs::read_to_string(path).map_err(|e| format!("Failed to read file '{}': {}", path, e))
 }
 
-fn cmd_run(file: &str) -> i32 {
+fn cmd_run(file: &str, verbose: bool) -> i32 {
     // Read source
     let source = match read_source_file(file) {
         Ok(s) => s,
@@ -130,26 +136,28 @@ fn cmd_run(file: &str) -> i32 {
         }
     };
 
-    // Print type information
-    println!("Type checking passed!");
-    if let Some(main_scheme) = type_env.lookup("main") {
-        println!("  main : {}", main_scheme.ty.pretty());
-    }
-    for func in &desugared.functions {
-        if let Some(scheme) = type_env.lookup(&func.name.value) {
-            println!("  {} : {}", func.name.value, scheme.ty.pretty());
+    // Print type information if verbose
+    if verbose {
+        println!("Type checking passed!");
+        if let Some(main_scheme) = type_env.lookup("main") {
+            println!("  main : {}", main_scheme.ty.pretty());
         }
-    }
-    println!();
+        for func in &desugared.functions {
+            if let Some(scheme) = type_env.lookup(&func.name.value) {
+                println!("  {} : {}", func.name.value, scheme.ty.pretty());
+            }
+        }
+        println!();
 
-    // Interpret
-    println!("Running program...\n");
+        println!("Running program...\n");
+    }
+
     interpreter::run(desugared);
 
     0
 }
 
-fn cmd_check(file: &str) -> i32 {
+fn cmd_check(file: &str, verbose: bool) -> i32 {
     // Read source
     let source = match read_source_file(file) {
         Ok(s) => s,
@@ -194,15 +202,17 @@ fn cmd_check(file: &str) -> i32 {
     // Type check
     match validate_and_type_check(desugared.clone()) {
         Ok(type_env) => {
-            println!("✓ Type check passed for '{}'", file);
+            if verbose {
+                println!("✓ Type check passed for '{}'", file);
 
-            // Print inferred types
-            if let Some(main_scheme) = type_env.lookup("main") {
-                println!("  main : {}", main_scheme.ty.pretty());
-            }
-            for func in &desugared.functions {
-                if let Some(scheme) = type_env.lookup(&func.name.value) {
-                    println!("  {} : {}", func.name.value, scheme.ty.pretty());
+                // Print inferred types
+                if let Some(main_scheme) = type_env.lookup("main") {
+                    println!("  main : {}", main_scheme.ty.pretty());
+                }
+                for func in &desugared.functions {
+                    if let Some(scheme) = type_env.lookup(&func.name.value) {
+                        println!("  {} : {}", func.name.value, scheme.ty.pretty());
+                    }
                 }
             }
 
