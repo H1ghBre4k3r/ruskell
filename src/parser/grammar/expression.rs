@@ -1,13 +1,15 @@
 //! Expression parsers for the Ruskell language
 
 use crate::ast::expression::{
-    BinOpKind, BinaryOp, Expression, FunctionCall, Lambda, LambdaBody, LambdaParam,
+    BinOpKind, BinaryOp, Expression, FunctionCall, Lambda, LambdaBody, LambdaParam, UnaryOp,
+    UnaryOpKind,
 };
 use crate::lexer::Token;
 
 use crate::parser::combinators::{
     BoxedParser, expect_arrow, expect_backslash, expect_comma, expect_do, expect_end,
-    expect_lparen, expect_rparen, many, optional,
+    expect_logical_and, expect_logical_not, expect_logical_or, expect_lparen, expect_rparen, many,
+    optional,
 };
 use crate::parser::state::{ParseState, Parser};
 
@@ -231,7 +233,102 @@ fn comparison_expr() -> BoxedParser<Expression<()>> {
         }))
     })
 }
-/// expression := lambda | function_call | singular
+
+/// unary := "!" unary | comparison
+fn unary_expr() -> BoxedParser<Expression<()>> {
+    BoxedParser::new(move |state: &mut ParseState| {
+        let pos = state.position();
+
+        // Try "!" prefix
+        if expect_logical_not().parse(state).is_ok() {
+            let operand = unary_expr().parse(state)?;
+            let position = operand_position(&operand);
+            return Ok(Expression::UnaryOp(UnaryOp {
+                op: UnaryOpKind::Not,
+                operand: Box::new(operand),
+                position,
+                info: (),
+            }));
+        }
+
+        state.restore(pos);
+        comparison_expr().parse(state)
+    })
+}
+
+/// logical_and := unary ("&&" unary)*
+fn logical_and_expr() -> BoxedParser<Expression<()>> {
+    BoxedParser::new(move |state: &mut ParseState| {
+        let mut left = unary_expr().parse(state)?;
+
+        loop {
+            let pos = state.position();
+
+            if expect_logical_and().parse(state).is_err() {
+                state.restore(pos);
+                break;
+            }
+
+            let right = match unary_expr().parse(state) {
+                Ok(r) => r,
+                Err(_) => {
+                    state.restore(pos);
+                    break;
+                }
+            };
+
+            let position = expr_position(&left);
+
+            left = Expression::BinaryOp(BinaryOp {
+                op: BinOpKind::And,
+                left: Box::new(left),
+                right: Box::new(right),
+                position,
+                info: (),
+            });
+        }
+
+        Ok(left)
+    })
+}
+
+/// logical_or := logical_and ("||" logical_and)*
+fn logical_or_expr() -> BoxedParser<Expression<()>> {
+    BoxedParser::new(move |state: &mut ParseState| {
+        let mut left = logical_and_expr().parse(state)?;
+
+        loop {
+            let pos = state.position();
+
+            if expect_logical_or().parse(state).is_err() {
+                state.restore(pos);
+                break;
+            }
+
+            let right = match logical_and_expr().parse(state) {
+                Ok(r) => r,
+                Err(_) => {
+                    state.restore(pos);
+                    break;
+                }
+            };
+
+            let position = expr_position(&left);
+
+            left = Expression::BinaryOp(BinaryOp {
+                op: BinOpKind::Or,
+                left: Box::new(left),
+                right: Box::new(right),
+                position,
+                info: (),
+            });
+        }
+
+        Ok(left)
+    })
+}
+
+/// expression := lambda | logical_or
 pub fn expression() -> BoxedParser<Expression<()>> {
     BoxedParser::new(move |state: &mut ParseState| {
         let pos = state.position();
@@ -242,8 +339,8 @@ pub fn expression() -> BoxedParser<Expression<()>> {
         }
         state.restore(pos);
 
-        // Try comparison expression (handles all binary ops)
-        comparison_expr().parse(state)
+        // Try logical_or expression (handles all binary and unary ops)
+        logical_or_expr().parse(state)
     })
 }
 
@@ -388,4 +485,24 @@ fn additive_expr() -> BoxedParser<Expression<()>> {
 
         Ok(left)
     })
+}
+
+/// Helper function to extract position from an expression
+fn expr_position(expr: &Expression<()>) -> lachs::Span {
+    match expr {
+        Expression::Unit(u) => u.position.clone(),
+        Expression::Ident(i) => i.position.clone(),
+        Expression::Integer(i) => i.position.clone(),
+        Expression::String(s) => s.position.clone(),
+        Expression::Boolean(b) => b.position.clone(),
+        Expression::FunctionCall(f) => f.position.clone(),
+        Expression::Lambda(l) => l.position.clone(),
+        Expression::BinaryOp(b) => b.position.clone(),
+        Expression::UnaryOp(u) => u.position.clone(),
+    }
+}
+
+/// Helper function to extract position from an operand (for unary ops)
+fn operand_position(expr: &Expression<()>) -> lachs::Span {
+    expr_position(expr)
 }

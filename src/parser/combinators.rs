@@ -241,6 +241,18 @@ pub fn expect_greater_equals() -> BoxedParser<Token> {
     token_with_error(|t| matches!(t, Token::GreaterEquals(_)), "'>='")
 }
 
+pub fn expect_logical_and() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::LogicalAnd(_)), "'&&'")
+}
+
+pub fn expect_logical_or() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::LogicalOr(_)), "'||'")
+}
+
+pub fn expect_logical_not() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::LogicalNot(_)), "'!'")
+}
+
 /// Parse zero or more occurrences
 pub fn many<T: 'static>(parser: BoxedParser<T>) -> BoxedParser<Vec<T>> {
     BoxedParser::new(move |state: &mut ParseState| {
