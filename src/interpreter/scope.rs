@@ -16,19 +16,32 @@ where
     T: Clone,
 {
     /// Create a new scope with top-level functions pre-loaded
+    /// Functions capture the global environment, enabling recursion and mutual recursion
     pub fn new(functions: Vec<CoreFunction<T>>) -> Self {
+        // First pass: build the global scope frame with empty captures
+        let mut global_frame: HashMap<String, RValue<T>> = HashMap::new();
+
+        for func in &functions {
+            global_frame.insert(
+                func.name.value.clone(),
+                RValue::CoreLambda(func.lambda.clone(), CapturedEnv(HashMap::new())),
+            );
+        }
+
+        // Second pass: create captured environment with all functions
+        let global_env = CapturedEnv(global_frame.clone());
+
+        // Third pass: replace with properly captured versions
+        // Now each function can see all other functions (including itself)
+        for func in functions {
+            global_frame.insert(
+                func.name.value.clone(),
+                RValue::CoreLambda(func.lambda, global_env.clone()),
+            );
+        }
+
         Self {
-            frames: vec![
-                functions
-                    .into_iter()
-                    .map(|func| {
-                        (
-                            func.name.value.clone(),
-                            RValue::CoreLambda(func.lambda, CapturedEnv(HashMap::new())),
-                        )
-                    })
-                    .collect::<HashMap<_, _>>(),
-            ],
+            frames: vec![global_frame],
         }
     }
 

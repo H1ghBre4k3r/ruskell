@@ -14,20 +14,11 @@ use parser::{ParseState, parse};
 use types::validate_and_type_check;
 
 const INPUT: &str = r#"
-main = do
-    default := 999
-    x := 5
-    result := case x of
-        0 => 17
-        1 => 19
-        2 => 41
-        n => times10(x)
-        _ => default
-    end
-    result
-end
+fib 0 = 0
+fib 1 = 1
+fib n = fib(n - 1) + fib(n - 2)
 
-times10 x = x * 10
+main = fib(6)
 "#;
 
 fn main() -> anyhow::Result<()> {

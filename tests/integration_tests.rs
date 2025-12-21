@@ -1079,3 +1079,97 @@ fn e2e_multi_clause_function_with_wildcard() {
         panic!("expected integer, got {:?}", result);
     }
 }
+
+#[test]
+fn e2e_recursive_factorial() {
+    let input = r#"
+        factorial 0 = 1
+        factorial n = n * factorial(n - 1)
+        
+        main = factorial(5)
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 120);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_recursive_fibonacci() {
+    let input = r#"
+        fib 0 = 0
+        fib 1 = 1
+        fib n = fib(n - 1) + fib(n - 2)
+        
+        main = fib(6)
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 8);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_mutual_recursion_even_odd() {
+    let input = r#"
+        even 0 = true
+        even n = odd(n - 1)
+        
+        odd 0 = false
+        odd n = even(n - 1)
+        
+        main = do
+            a := even(4)
+            b := odd(4)
+            c := even(5)
+            d := odd(5)
+            if a && !b && !c && d then 1 else 0 end
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 1);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_recursive_sum_to_n() {
+    let input = r#"
+        sumTo 0 = 0
+        sumTo n = n + sumTo(n - 1)
+        
+        main = sumTo(10)
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 55);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_recursive_power() {
+    let input = r#"
+        power n = if n == 0 then 1 else 2 * power(n - 1) end
+        
+        main = power(8)
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 256);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
