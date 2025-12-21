@@ -11,7 +11,7 @@ use std::process;
 use desugar::desugar_program;
 use lexer::Token;
 use parser::{ParseState, parse};
-use types::Infer;
+use types::validate_and_type_check;
 
 const INPUT: &str = r#"
 add x y = x + y
@@ -45,12 +45,11 @@ fn main() -> anyhow::Result<()> {
             // Desugar the program
             let desugared = desugar_program(prog);
 
-            // Type check the desugared program
-            println!("Type checking...\n");
-            let mut infer = Infer::new();
-            match infer.infer_program(&desugared) {
+            // Validate and type check the desugared program
+            println!("Validating and type checking...\n");
+            match validate_and_type_check(desugared.clone()) {
                 Ok(type_env) => {
-                    println!("✓ Type checking passed!");
+                    println!("✓ Validation and type checking passed!");
 
                     // Print inferred types for main and functions
                     if let Some(main_scheme) = type_env.lookup("main") {
@@ -66,12 +65,12 @@ fn main() -> anyhow::Result<()> {
                     println!("Running program...\n");
                     interpreter::run(desugared);
                 }
-                Err(type_errors) => {
+                Err(validation_errors) => {
                     eprintln!(
-                        "Type checking failed with {} error(s):\n",
-                        type_errors.len()
+                        "Validation failed with {} error(s):\n",
+                        validation_errors.len()
                     );
-                    for error in type_errors {
+                    for error in validation_errors {
                         eprintln!("{}\n", error);
                     }
                     process::exit(1);

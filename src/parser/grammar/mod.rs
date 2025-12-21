@@ -164,26 +164,24 @@ pub fn program() -> BoxedParser<Program<()>> {
             }
         }
 
-        let main = functions.iter().find(|f| f.name.value == "main").cloned();
+        // Find main function - if it doesn't exist, use the first function as a placeholder
+        // The type checker will validate that main exists and has the correct type
+        let main = functions
+            .iter()
+            .find(|f| f.name.value == "main")
+            .cloned()
+            .or_else(|| functions.first().cloned())
+            .ok_or_else(|| ParseError::new("program must have at least one function"))?;
 
-        match main {
-            Some(main) => {
-                let other_functions = functions
-                    .into_iter()
-                    .filter(|f| f.name.value != "main")
-                    .collect();
+        let other_functions = functions
+            .into_iter()
+            .filter(|f| f.name.value != "main")
+            .collect();
 
-                Ok(Program {
-                    main,
-                    functions: other_functions,
-                })
-            }
-            None => {
-                let err = ParseError::new("program must have a 'main' function");
-                state.record_error(err.clone());
-                Err(err)
-            }
-        }
+        Ok(Program {
+            main,
+            functions: other_functions,
+        })
     })
 }
 
