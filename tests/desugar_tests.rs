@@ -1,9 +1,18 @@
 //! Tests for desugaring transformations
 
+use ruskell::ast::{Function, FunctionDef};
 use ruskell::core::*;
 use ruskell::desugar::{desugar_program, erase_program};
 use ruskell::lexer::Token;
 use ruskell::parser::{ParseState, parse};
+
+// Helper to unwrap FunctionDef::Single
+fn unwrap_single(def: &FunctionDef<()>) -> &Function<()> {
+    match def {
+        FunctionDef::Single(f) => f,
+        FunctionDef::Multi { .. } => panic!("expected single function, got multi-clause"),
+    }
+}
 
 fn desugar_test(input: &str) -> CoreProgram<()> {
     let tokens = Token::lex(input).expect("lexing failed");
@@ -33,7 +42,7 @@ fn desugar_and_erase_roundtrip() {
     let erased = erase_program(desugared);
 
     // Should have main with the right structure
-    assert_eq!(erased.main.name.value, "main");
+    assert_eq!(unwrap_single(&erased.main).name.value, "main");
 }
 
 #[test]

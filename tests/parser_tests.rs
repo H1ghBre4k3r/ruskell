@@ -226,14 +226,14 @@ fn parse_function_with_single_param() {
         main = do end
     "#;
 
-    let lexed = Token::lex(input).map(unwrap_single).unwrap();
+    let lexed = Token::lex(input).unwrap();
     let mut state = ParseState::new(lexed);
     let (program, errors) = parse(&mut state);
 
     assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     assert!(program.is_some());
 
-    let prog = program.map(unwrap_single).unwrap();
+    let prog = program.unwrap();
     let add_fn = prog
         .functions
         .iter()
@@ -250,14 +250,14 @@ fn parse_function_with_multiple_params() {
         main = do end
     "#;
 
-    let lexed = Token::lex(input).map(unwrap_single).unwrap();
+    let lexed = Token::lex(input).unwrap();
     let mut state = ParseState::new(lexed);
     let (program, errors) = parse(&mut state);
 
     assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     assert!(program.is_some());
 
-    let prog = program.map(unwrap_single).unwrap();
+    let prog = program.unwrap();
     let add_fn = prog
         .functions
         .iter()
@@ -274,14 +274,14 @@ fn parse_function_with_unit_param() {
         main = do end
     "#;
 
-    let lexed = Token::lex(input).map(unwrap_single).unwrap();
+    let lexed = Token::lex(input).unwrap();
     let mut state = ParseState::new(lexed);
     let (program, errors) = parse(&mut state);
 
     assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     assert!(program.is_some());
 
-    let prog = program.map(unwrap_single).unwrap();
+    let prog = program.unwrap();
     let ignore_fn = prog
         .functions
         .iter()
@@ -301,14 +301,14 @@ fn parse_function_no_params_backwards_compat() {
         main = do end
     "#;
 
-    let lexed = Token::lex(input).map(unwrap_single).unwrap();
+    let lexed = Token::lex(input).unwrap();
     let mut state = ParseState::new(lexed);
     let (program, errors) = parse(&mut state);
 
     assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     assert!(program.is_some());
 
-    let prog = program.map(unwrap_single).unwrap();
+    let prog = program.unwrap();
     let noparams_fn = prog
         .functions
         .iter()
@@ -325,14 +325,14 @@ fn parse_function_single_expression_body() {
         main = do end
     "#;
 
-    let lexed = Token::lex(input).map(unwrap_single).unwrap();
+    let lexed = Token::lex(input).unwrap();
     let mut state = ParseState::new(lexed);
     let (program, errors) = parse(&mut state);
 
     assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     assert!(program.is_some());
 
-    let prog = program.map(unwrap_single).unwrap();
+    let prog = program.unwrap();
     let double_fn = prog
         .functions
         .iter()
@@ -353,14 +353,14 @@ fn parse_function_do_block_body() {
         main = do end
     "#;
 
-    let lexed = Token::lex(input).map(unwrap_single).unwrap();
+    let lexed = Token::lex(input).unwrap();
     let mut state = ParseState::new(lexed);
     let (program, errors) = parse(&mut state);
 
     assert!(errors.is_empty(), "Expected no errors, got: {errors:?}");
     assert!(program.is_some());
 
-    let prog = program.map(unwrap_single).unwrap();
+    let prog = program.unwrap();
     let compute_fn = prog
         .functions
         .iter()
