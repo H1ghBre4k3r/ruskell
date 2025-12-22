@@ -1,0 +1,8 @@
+main = do 
+  encapsulatedComputation := do
+    a := 21
+    b := 2
+    a * b
+  end
+  encapsulatedComputation
+end

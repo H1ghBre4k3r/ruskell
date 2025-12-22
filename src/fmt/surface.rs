@@ -197,6 +197,26 @@ fn format_lambda_expression<T>(lambda: &Lambda<T>, fmt: &mut Formatter) {
 }
 
 fn format_function_call<T>(call: &FunctionCall<T>, fmt: &mut Formatter) {
+    // Check if this is an immediately-invoked do-block: (\() => do ... end)(())
+    // If so, just print the do-block directly
+    if let Expression::Lambda(lambda) = &*call.func {
+        if let LambdaBody::Block(stmts) = &lambda.body {
+            // Check if it's a unit lambda being called with unit
+            if lambda.params.len() == 1 {
+                if let LambdaParam::Unit(_) = &lambda.params[0] {
+                    if call.args.len() == 1 {
+                        if matches!(&call.args[0], Expression::Unit(_)) {
+                            // This is (\() => do ... end)(()), just print do ... end
+                            format_block(stmts, fmt);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Normal function call
     format_expression(&call.func, fmt, 100); // High precedence for function names
     fmt.write_str("(");
     for (i, arg) in call.args.iter().enumerate() {
@@ -244,6 +264,10 @@ fn format_unary_op<T>(unop: &UnaryOp<T>, fmt: &mut Formatter, parent_prec: u8) {
 }
 
 fn format_if_then_else<T>(ite: &IfThenElse<T>, fmt: &mut Formatter) {
+    // Check if both branches are do-blocks (immediately-invoked unit lambdas)
+    let then_is_do_block = is_do_block_expression(&ite.then_expr);
+    let else_is_do_block = is_do_block_expression(&ite.else_expr);
+
     fmt.write_str("if ");
     format_expression(&ite.condition, fmt, 0);
     fmt.write_str(" then ");
@@ -254,7 +278,28 @@ fn format_if_then_else<T>(ite: &IfThenElse<T>, fmt: &mut Formatter) {
 
     format_expression(&ite.else_expr, fmt, 0);
 
-    fmt.write_str(" end");
+    // Only add 'end' if at least one branch is NOT a do-block
+    if !then_is_do_block || !else_is_do_block {
+        fmt.write_str(" end");
+    }
+}
+
+// Helper to check if an expression is a do-block (immediately-invoked unit lambda)
+fn is_do_block_expression<T>(expr: &Expression<T>) -> bool {
+    if let Expression::FunctionCall(call) = expr {
+        if let Expression::Lambda(lambda) = &*call.func {
+            if let LambdaBody::Block(_) = &lambda.body {
+                if lambda.params.len() == 1 {
+                    if let LambdaParam::Unit(_) = &lambda.params[0] {
+                        if call.args.len() == 1 {
+                            return matches!(&call.args[0], Expression::Unit(_));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
 }
 
 fn format_match<T>(m: &Match<T>, fmt: &mut Formatter) {

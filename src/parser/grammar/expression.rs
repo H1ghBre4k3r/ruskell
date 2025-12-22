@@ -2,7 +2,7 @@
 
 use crate::ast::expression::{
     BinOpKind, BinaryOp, Expression, FunctionCall, IfThenElse, Lambda, LambdaBody, LambdaParam,
-    UnaryOp, UnaryOpKind,
+    UnaryOp, UnaryOpKind, Unit,
 };
 use crate::lexer::Token;
 
@@ -167,16 +167,40 @@ pub fn lambda() -> BoxedParser<Expression<()>> {
     })
 }
 
-/// if_then_else := "if" expression "then" expression "else" expression "end"
+/// if_then_else := "if" expression "then" branch "else" branch ["end"]
+/// branch := do_block | expression
+/// Note: If both branches are do-blocks, the final "end" is optional
 pub fn if_then_else() -> BoxedParser<Expression<()>> {
     BoxedParser::new(move |state: &mut ParseState| {
         let start = expect_if().parse(state)?.pos();
         let condition = expression().parse(state)?;
         expect_then().parse(state)?;
+        
+        // Check if then-branch is a do-block
+        let then_is_do_block = matches!(state.peek(), Some(Token::Do(_)));
         let then_expr = expression().parse(state)?;
+        
         expect_else().parse(state)?;
+        
+        // Check if else-branch is a do-block  
+        let else_is_do_block = matches!(state.peek(), Some(Token::Do(_)));
         let else_expr = expression().parse(state)?;
-        let end = expect_end().parse(state)?.pos();
+        
+        // Only require 'end' if at least one branch is NOT a do-block
+        let end = if then_is_do_block && else_is_do_block {
+            // Both branches are do-blocks, 'end' is optional
+            let pos = state.position();
+            if let Ok(end_tok) = expect_end().parse(state) {
+                end_tok.pos()
+            } else {
+                state.restore(pos);
+                // Use start position as fallback (will be overridden by merge)
+                start.clone()
+            }
+        } else {
+            // At least one branch is not a do-block, require 'end'
+            expect_end().parse(state)?.pos()
+        };
 
         Ok(Expression::IfThenElse(IfThenElse {
             condition: Box::new(condition),
@@ -460,10 +484,50 @@ pub fn expression() -> BoxedParser<Expression<()>> {
     })
 }
 
-/// primary := function_call | singular | "(" expression ")"
+/// do_block := "do" statement* "end"
+/// Parses a do-block as an expression (like Rust blocks)
+fn do_block_expr() -> BoxedParser<Expression<()>> {
+    BoxedParser::new(move |state: &mut ParseState| {
+        let start = expect_do().parse(state)?.pos();
+        let body = many(statement()).parse(state)?;
+        let end = expect_end().parse(state)?.pos();
+
+        // Wrap the do-block in an immediately-invoked lambda
+        // do ... end becomes (\() => do ... end)()
+        let lambda = Lambda {
+            params: vec![LambdaParam::Unit(Unit {
+                position: start.clone(),
+                info: (),
+            })],
+            body: LambdaBody::Block(body),
+            position: start.merge(&end),
+            info: (),
+        };
+
+        let func_call = FunctionCall {
+            func: Box::new(Expression::Lambda(lambda)),
+            args: vec![Expression::Unit(Unit {
+                position: start.clone(),
+                info: (),
+            })],
+            position: start.merge(&end),
+            info: (),
+        };
+
+        Ok(Expression::FunctionCall(func_call))
+    })
+}
+
+/// primary := do_block | function_call | singular | "(" expression ")"
 fn primary_expr() -> BoxedParser<Expression<()>> {
     BoxedParser::new(move |state: &mut ParseState| {
         let pos = state.position();
+
+        // Try do-block expression
+        if let Ok(expr) = do_block_expr().parse(state) {
+            return Ok(expr);
+        }
+        state.restore(pos);
 
         // Try parenthesized expression or unit literal
         if let Ok(start) = expect_lparen().parse(state) {
