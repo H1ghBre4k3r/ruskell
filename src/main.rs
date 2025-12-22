@@ -11,7 +11,7 @@ use std::fs;
 use std::process;
 
 use clap::{Parser, Subcommand};
-use desugar::desugar_program;
+use desugar::{desugar_program, lift};
 use lexer::Token;
 use parser::{ParseState, parse};
 use types::validate_and_type_check;
@@ -129,8 +129,11 @@ fn cmd_run(file: &str, verbose: bool) -> i32 {
     // Desugar
     let desugared = desugar_program(program);
 
+    // Lambda lifting
+    let lifted = lift::lift_program(desugared);
+
     // Type check
-    let type_env = match validate_and_type_check(desugared.clone()) {
+    let type_env = match validate_and_type_check(lifted.clone()) {
         Ok(env) => env,
         Err(validation_errors) => {
             eprintln!(
@@ -150,7 +153,7 @@ fn cmd_run(file: &str, verbose: bool) -> i32 {
         if let Some(main_scheme) = type_env.lookup("main") {
             println!("  main : {}", main_scheme.ty.pretty());
         }
-        for func in &desugared.functions {
+        for func in &lifted.functions {
             if let Some(scheme) = type_env.lookup(&func.name.value) {
                 println!("  {} : {}", func.name.value, scheme.ty.pretty());
             }
@@ -160,7 +163,7 @@ fn cmd_run(file: &str, verbose: bool) -> i32 {
         println!("Running program...\n");
     }
 
-    interpreter::run(desugared);
+    interpreter::run(lifted);
 
     0
 }
@@ -207,8 +210,11 @@ fn cmd_check(file: &str, verbose: bool) -> i32 {
     // Desugar
     let desugared = desugar_program(program);
 
+    // Lambda lifting
+    let lifted = lift::lift_program(desugared);
+
     // Type check
-    match validate_and_type_check(desugared.clone()) {
+    match validate_and_type_check(lifted.clone()) {
         Ok(type_env) => {
             if verbose {
                 println!("✓ Type check passed for '{}'", file);
@@ -217,7 +223,7 @@ fn cmd_check(file: &str, verbose: bool) -> i32 {
                 if let Some(main_scheme) = type_env.lookup("main") {
                     println!("  main : {}", main_scheme.ty.pretty());
                 }
-                for func in &desugared.functions {
+                for func in &lifted.functions {
                     if let Some(scheme) = type_env.lookup(&func.name.value) {
                         println!("  {} : {}", func.name.value, scheme.ty.pretty());
                     }
@@ -277,9 +283,10 @@ fn cmd_fmt(file: &str, in_place: bool, desugar: bool) -> i32 {
 
     // Format the AST
     let formatted = if desugar {
-        // Desugar and format Core AST
+        // Desugar, lift, and format Core AST
         let desugared = desugar_program(program);
-        format!("{}", desugared)
+        let lifted = lift::lift_program(desugared);
+        format!("{}", lifted)
     } else {
         // Format surface AST
         format!("{}", program)

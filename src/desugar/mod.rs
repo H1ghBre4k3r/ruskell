@@ -3,8 +3,10 @@
 //! This module handles desugaring transformations:
 //! - Multi-parameter lambdas → nested single-parameter lambdas
 //! - Multi-argument function calls → nested single-argument calls
+//! - Lambda lifting (closure conversion) → explicit capture parameters
 
 pub mod erase;
+pub mod lift;
 
 use crate::ast;
 use crate::core::*;
