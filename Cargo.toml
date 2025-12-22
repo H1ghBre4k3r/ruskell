@@ -3,7 +3,11 @@ name = "ruskell"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "rsk"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = "1.0.100"
-clap = "4.5.53"
+clap = { version = "4.5.53", features = ["derive"] }
 lachs = "0.1.4"

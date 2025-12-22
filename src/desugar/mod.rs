@@ -152,25 +152,29 @@ fn build_nested_match(
                 match clause.body {
                     ast::expression::LambdaBody::Expression(expr) => *expr,
                     ast::expression::LambdaBody::Block(stmts) => {
-                        // Convert block to expression
-                        // For now, panic - we'll need to handle this better
-                        if stmts.is_empty() {
-                            ast::expression::Expression::Unit(ast::expression::Unit {
+                        // Multi-statement block: wrap in immediately-invoked lambda
+                        // do ... end becomes (\() => do ... end)()
+                        let lambda = ast::expression::Lambda {
+                            params: vec![ast::expression::LambdaParam::Unit(
+                                ast::expression::Unit {
+                                    position: clause.position.clone(),
+                                    info: (),
+                                },
+                            )],
+                            body: ast::expression::LambdaBody::Block(stmts),
+                            position: clause.position.clone(),
+                            info: (),
+                        };
+
+                        ast::expression::Expression::FunctionCall(ast::expression::FunctionCall {
+                            func: Box::new(ast::expression::Expression::Lambda(lambda)),
+                            args: vec![ast::expression::Expression::Unit(ast::expression::Unit {
                                 position: clause.position.clone(),
                                 info: (),
-                            })
-                        } else if stmts.len() == 1 {
-                            match &stmts[0] {
-                                ast::statement::Statement::Expression(expr) => expr.clone(),
-                                _ => panic!(
-                                    "Multi-clause function with block body not yet fully supported"
-                                ),
-                            }
-                        } else {
-                            panic!(
-                                "Multi-clause function with multi-statement block not yet supported"
-                            )
-                        }
+                            })],
+                            position: clause.position.clone(),
+                            info: (),
+                        })
                     }
                 }
             } else {
@@ -179,23 +183,28 @@ fn build_nested_match(
                 match clause.body {
                     ast::expression::LambdaBody::Expression(expr) => *expr,
                     ast::expression::LambdaBody::Block(stmts) => {
-                        if stmts.is_empty() {
-                            ast::expression::Expression::Unit(ast::expression::Unit {
+                        // Multi-statement block: wrap in immediately-invoked lambda
+                        let lambda = ast::expression::Lambda {
+                            params: vec![ast::expression::LambdaParam::Unit(
+                                ast::expression::Unit {
+                                    position: clause.position.clone(),
+                                    info: (),
+                                },
+                            )],
+                            body: ast::expression::LambdaBody::Block(stmts),
+                            position: clause.position.clone(),
+                            info: (),
+                        };
+
+                        ast::expression::Expression::FunctionCall(ast::expression::FunctionCall {
+                            func: Box::new(ast::expression::Expression::Lambda(lambda)),
+                            args: vec![ast::expression::Expression::Unit(ast::expression::Unit {
                                 position: clause.position.clone(),
                                 info: (),
-                            })
-                        } else if stmts.len() == 1 {
-                            match &stmts[0] {
-                                ast::statement::Statement::Expression(expr) => expr.clone(),
-                                _ => panic!(
-                                    "Multi-clause function with block body not yet fully supported"
-                                ),
-                            }
-                        } else {
-                            panic!(
-                                "Multi-clause function with multi-statement block not yet supported"
-                            )
-                        }
+                            })],
+                            position: clause.position.clone(),
+                            info: (),
+                        })
                     }
                 }
             };

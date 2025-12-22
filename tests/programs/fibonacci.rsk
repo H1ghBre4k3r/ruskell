@@ -1,0 +1,20 @@
+fib 0 = do
+    result := do 
+        0
+    end
+    result
+end
+fib 1 = do 
+    getValue := (\() => 1)
+    result := getValue()
+end
+fib n = do 
+    first := fib(n - 1)
+    second := fib(n - 2)
+    result := do 
+        first + second
+    end
+    result
+end
+
+main = fib(8)

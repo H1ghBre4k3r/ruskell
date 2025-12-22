@@ -1,0 +1,11 @@
+multiply a b = a * b
+
+add x y = do x + y end
+
+main = do
+  x := add(1, 2)
+  y := multiply(x, 3)
+  z := \a, b => do a + b end
+  result := if x > 0 then y else 0 end
+  result
+end
