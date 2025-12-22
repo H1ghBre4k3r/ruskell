@@ -36,23 +36,8 @@
 //! ```
 
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::core::*;
-
-/// Global counter for generating unique lambda names
-static LAMBDA_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-/// Reset the lambda counter (useful for testing)
-fn reset_lambda_counter() {
-    LAMBDA_COUNTER.store(0, Ordering::SeqCst);
-}
-
-/// Generate a unique name for a lifted lambda
-fn generate_lambda_name() -> String {
-    let id = LAMBDA_COUNTER.fetch_add(1, Ordering::SeqCst);
-    format!("lambda_{}", id)
-}
 
 /// Context for collecting lifted lambdas during traversal
 struct LiftContext {
@@ -60,6 +45,8 @@ struct LiftContext {
     globals: HashSet<String>,
     /// Lifted lambdas collected during traversal
     lifted_functions: Vec<CoreFunction<()>>,
+    /// Counter for generating unique lambda names
+    lambda_counter: usize,
 }
 
 impl LiftContext {
@@ -67,14 +54,20 @@ impl LiftContext {
         Self {
             globals,
             lifted_functions: Vec::new(),
+            lambda_counter: 0,
         }
+    }
+
+    /// Generate a unique name for a lifted lambda
+    fn generate_lambda_name(&mut self) -> String {
+        let id = self.lambda_counter;
+        self.lambda_counter += 1;
+        format!("lambda_{}", id)
     }
 }
 
 /// Lift all lambdas in a program to top-level functions
 pub fn lift_program(program: CoreProgram<()>) -> CoreProgram<()> {
-    reset_lambda_counter();
-
     // Collect all global function names
     let mut global_names: HashSet<String> = HashSet::new();
     global_names.insert(program.main.name.value.clone());
@@ -297,7 +290,7 @@ fn extract_lambda(lambda: &CoreLambda<()>, ctx: &mut LiftContext) -> CoreExpr<()
     let free = free_vars_lambda(lambda, &ctx.globals);
 
     // Generate a unique name for this lambda
-    let lambda_name = generate_lambda_name();
+    let lambda_name = ctx.generate_lambda_name();
 
     if free.is_empty() {
         // No captures - create a simple function
@@ -525,8 +518,6 @@ mod tests {
 
     #[test]
     fn test_lambda_extraction_no_capture() {
-        reset_lambda_counter();
-
         // Simple lambda with no captures
         let lambda = CoreLambda {
             param: CoreLambdaParam::Ident(make_ident("x")),
@@ -551,8 +542,6 @@ mod tests {
 
     #[test]
     fn test_lambda_extraction_with_capture() {
-        reset_lambda_counter();
-
         // Lambda with one capture: \y => x + y
         let lambda = CoreLambda {
             param: CoreLambdaParam::Ident(make_ident("y")),

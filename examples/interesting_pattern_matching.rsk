@@ -1,0 +1,22 @@
+classify 0 0 = "origin"
+classify 0 y = "y-axis"
+classify x 0 = "x-axis"
+classify x y = "quadrant"
+
+add x y = x + y
+
+combine x y z = x + y * z
+
+main = do
+    origin := classify(0, 0)
+    print(origin)
+    xAxis := classify(5, 0)
+    print(xAxis)
+    yAxis := classify(0, 3)
+    print(yAxis)
+    quad := classify(2, 3)
+    print(quad)
+    sum := add(10, 20)
+    result := combine(1, 2, 3)
+    result
+end

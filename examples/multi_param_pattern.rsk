@@ -1,0 +1,30 @@
+classify 0 0 = "origin"
+classify x 0 = "x-axis"
+classify 0 y = "y-axis"
+classify x y = "quadrant"
+
+add x y = x + y
+
+combine x y z = x + y * z
+
+grid 0 0 = 100
+grid 0 1 = 101
+grid 1 0 = 110
+grid 1 1 = 111
+grid x y = x + y
+
+main = do
+    origin := classify(0, 0)
+    xAxis := classify(5, 0)
+    yAxis := classify(0, 3)
+    quad := classify(2, 3)
+    
+    sum := add(10, 20)
+    
+    result := combine(1, 2, 3)
+    
+    g00 := grid(0, 0)
+    g23 := grid(2, 3)
+    
+    g23
+end

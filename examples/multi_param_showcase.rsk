@@ -1,0 +1,56 @@
+-- Comprehensive Multi-Parameter Pattern Matching Showcase
+
+-- Two-parameter grid with all literal patterns
+grid 0 0 = 1
+grid 0 1 = 2
+grid 1 0 = 3
+grid 1 1 = 4
+grid x y = 0
+
+-- Mixed literal and variable patterns
+classify 0 0 = "origin"
+classify x 0 = "x-axis"
+classify 0 y = "y-axis"
+classify x y = "quadrant"
+
+-- Three parameters with nested matching
+ternary 0 0 0 = 0
+ternary 1 0 0 = 100
+ternary 0 1 0 = 200
+ternary 0 0 1 = 300
+ternary 1 1 0 = 400
+ternary 1 0 1 = 500
+ternary 0 1 1 = 600
+ternary 1 1 1 = 700
+ternary x y z = x + y + z
+
+-- Practical example: string formatting based on boolean flags
+format 1 1 = "both"
+format 1 0 = "first"
+format 0 1 = "second"
+format 0 0 = "neither"
+format x y = "invalid"
+
+main = do
+    -- Test grid
+    g00 := grid(0, 0)
+    g11 := grid(1, 1)
+    gXY := grid(5, 7)
+    
+    -- Test classify  
+    c00 := classify(0, 0)
+    cX0 := classify(5, 0)
+    c0Y := classify(0, 5)
+    cXY := classify(3, 4)
+    
+    -- Test ternary
+    t000 := ternary(0, 0, 0)
+    t111 := ternary(1, 1, 1)
+    tXYZ := ternary(2, 3, 4)
+    
+    -- Test format
+    f11 := format(1, 1)
+    f00 := format(0, 0)
+    
+    0
+end
