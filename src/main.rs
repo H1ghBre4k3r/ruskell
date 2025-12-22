@@ -42,13 +42,16 @@ enum Command {
         #[arg(short, long)]
         verbose: bool,
     },
-    /// Format a Ruskell source file (not yet implemented)
+    /// Format a Ruskell source file
     Fmt {
         /// Path to .rsk file
         file: String,
         /// Format in place
         #[arg(short, long)]
         in_place: bool,
+        /// Print desugared Core AST instead of formatted source
+        #[arg(short, long)]
+        desugar: bool,
     },
     /// Start interactive REPL (not yet implemented)
     Repl,
@@ -68,7 +71,11 @@ fn main() {
     let exit_code = match cli.command {
         Command::Run { file, verbose } => cmd_run(&file, verbose),
         Command::Check { file, verbose } => cmd_check(&file, verbose),
-        Command::Fmt { file, in_place } => cmd_fmt(&file, in_place),
+        Command::Fmt {
+            file,
+            in_place,
+            desugar,
+        } => cmd_fmt(&file, in_place, desugar),
         Command::Repl => cmd_repl(),
         Command::Build { file, output } => cmd_build(&file, output),
     };
@@ -229,7 +236,7 @@ fn cmd_check(file: &str, verbose: bool) -> i32 {
     }
 }
 
-fn cmd_fmt(file: &str, in_place: bool) -> i32 {
+fn cmd_fmt(file: &str, in_place: bool, desugar: bool) -> i32 {
     // Read source
     let source = match read_source_file(file) {
         Ok(s) => s,
@@ -269,10 +276,21 @@ fn cmd_fmt(file: &str, in_place: bool) -> i32 {
     };
 
     // Format the AST
-    let formatted = format!("{}", program);
+    let formatted = if desugar {
+        // Desugar and format Core AST
+        let desugared = desugar_program(program);
+        format!("{}", desugared)
+    } else {
+        // Format surface AST
+        format!("{}", program)
+    };
 
     // Write output
     if in_place {
+        if desugar {
+            eprintln!("Error: --in-place cannot be used with --desugar");
+            return 1;
+        }
         match fs::write(file, &formatted) {
             Ok(_) => {
                 eprintln!("Formatted '{}'", file);
