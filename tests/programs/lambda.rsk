@@ -1,0 +1,12 @@
+main = do
+    a := 1
+    inner := \x => do
+        x + a
+    end
+
+    first := inner(1)
+    a := 2
+    second := inner(1)
+    result := first + second
+    result
+end

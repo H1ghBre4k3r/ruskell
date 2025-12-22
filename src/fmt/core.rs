@@ -57,11 +57,13 @@ impl<T> Display for CoreProgram<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut formatter = Formatter::new();
 
-        formatter.write_str("-- Core AST (Desugared)");
+        formatter.write_str("-- Core AST (Desugared + Lambda Lifted)");
         formatter.write_newline();
         formatter.write_str("-- Note: Multi-param lambdas are now nested single-param lambdas");
         formatter.write_newline();
         formatter.write_str("-- Note: Multi-arg calls are now nested single-arg calls");
+        formatter.write_newline();
+        formatter.write_str("-- Note: Lambdas with captures are lifted: \\x => body becomes (\\a => \\x => body)(a)");
         formatter.write_newline();
         formatter.write_newline();
 

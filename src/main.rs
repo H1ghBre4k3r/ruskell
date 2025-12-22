@@ -283,9 +283,10 @@ fn cmd_fmt(file: &str, in_place: bool, desugar: bool) -> i32 {
 
     // Format the AST
     let formatted = if desugar {
-        // Desugar and format Core AST
+        // Desugar, lift, and format Core AST
         let desugared = desugar_program(program);
-        format!("{}", desugared)
+        let lifted = lift::lift_program(desugared);
+        format!("{}", lifted)
     } else {
         // Format surface AST
         format!("{}", program)

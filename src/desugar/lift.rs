@@ -278,7 +278,40 @@ fn lift_statement(stmt: CoreStatement<()>, globals: &HashSet<String>) -> CoreSta
 /// Recursively lift all lambdas in an expression
 fn lift_expr(expr: CoreExpr<()>, globals: &HashSet<String>) -> CoreExpr<()> {
     match expr {
-        CoreExpr::Lambda(lambda) => CoreExpr::Lambda(lift_lambda_with_globals(lambda, globals)),
+        CoreExpr::Lambda(lambda) => {
+            // Lift the lambda
+            let free = free_vars_lambda(&lambda, globals);
+
+            if free.is_empty() {
+                // No captures - just recursively lift inner expressions
+                CoreExpr::Lambda(lift_lambda_inner(lambda, globals))
+            } else {
+                // Has captures - lift AND auto-apply the captured values
+                // Transform: \x => body  (captures a, b)
+                // Into: (\a => \b => \x => body)(a)(b)
+
+                let mut captured: Vec<String> = free.into_iter().collect();
+                captured.sort();
+
+                let lifted_lambda = build_lifted_lambda(captured.clone(), lambda, globals);
+
+                // Build nested function calls to apply captured values
+                let mut result = CoreExpr::Lambda(lifted_lambda);
+                for cap_var in &captured {
+                    result = CoreExpr::FunctionCall(CoreFunctionCall {
+                        func: Box::new(result),
+                        arg: Box::new(CoreExpr::Ident(CoreIdent {
+                            value: cap_var.clone(),
+                            position: lachs::Span::default(),
+                            info: (),
+                        })),
+                        position: lachs::Span::default(),
+                        info: (),
+                    });
+                }
+                result
+            }
+        }
         CoreExpr::FunctionCall(call) => CoreExpr::FunctionCall(CoreFunctionCall {
             func: Box::new(lift_expr(*call.func, globals)),
             arg: Box::new(lift_expr(*call.arg, globals)),
