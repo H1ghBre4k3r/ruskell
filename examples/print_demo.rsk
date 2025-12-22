@@ -1,0 +1,43 @@
+
+greet name = do
+    print("Hello, ")
+    print(name)
+    print("!")
+    ()
+end
+
+main = do
+    print("=== Print Function Demo ===")
+    print("")
+    
+    print("Printing strings:")
+    greet("World")
+    greet("Ruskell")
+    print("")
+    
+    print("Printing integers:")
+    print(42)
+    print(100)
+    print(0)
+    print("")
+    
+    print("Printing booleans:")
+    print(true)
+    print(false)
+    print("")
+    
+    print("Printing unit:")
+    print(())
+    print("")
+    
+    print("Printing computed values:")
+    result := 10 + 5 * 2
+    print(result)
+    
+    comparison := 5 < 10
+    print(comparison)
+    print("")
+    
+    print("=== Demo Complete ===")
+    0
+end

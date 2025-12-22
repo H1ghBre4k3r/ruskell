@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::core::CoreFunction;
 
-use super::value::{CapturedEnv, RValue};
+use super::value::{Builtin, CapturedEnv, RValue};
 
 type ScopeFrame<T> = HashMap<String, RValue<T>>;
 
@@ -20,6 +20,9 @@ where
     pub fn new(functions: Vec<CoreFunction<T>>) -> Self {
         // First pass: build the global scope frame with empty captures
         let mut global_frame: HashMap<String, RValue<T>> = HashMap::new();
+
+        // Add builtins
+        global_frame.insert("print".to_string(), RValue::Builtin(Builtin::Print));
 
         for func in &functions {
             global_frame.insert(

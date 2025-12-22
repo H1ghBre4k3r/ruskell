@@ -6,7 +6,19 @@ factorial 0 = 1
 factorial n = n * factorial(n - 1)
 
 main = do
+  print("Computing Fibonacci(10)...")
   fibResult := fib(10)
+  print("Fibonacci(10) =")
+  print(fibResult)
+  
+  print("Computing factorial(5)...")
   factResult := factorial(5)
-  fibResult + factResult
+  print("factorial(5) =")
+  print(factResult)
+  
+  sum := fibResult + factResult
+  print("Sum =")
+  print(sum)
+  
+  sum
 end

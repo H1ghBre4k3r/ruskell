@@ -444,7 +444,17 @@ impl Infer {
     }
 
     pub fn infer_program(&mut self, program: &CoreProgram<()>) -> Result<TypeEnv, Vec<TypeError>> {
+        // Start with builtins in the environment
         let mut env = TypeEnv::empty();
+
+        // Add print: forall a. a -> Unit
+        let type_var = self.fresh_var();
+        let print_type = Type::func(Type::Var(type_var.clone()), Type::Unit);
+        env = env.extend(
+            "print".to_string(),
+            TypeScheme::polymorphic(vec![type_var], print_type),
+        );
+
         let mut errors = Vec::new();
 
         // Pass 1: Add all functions with fresh type variables (enables recursion)

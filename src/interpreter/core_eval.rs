@@ -42,6 +42,24 @@ where
 
                 match func_value {
                     RValue::CoreLambda(lambda, captured) => lambda.run(arg_value, scope, &captured),
+                    RValue::Builtin(builtin) => {
+                        use super::value::Builtin;
+                        match builtin {
+                            Builtin::Print => {
+                                // Print the value to stdout
+                                match &arg_value {
+                                    RValue::Unit => println!("()"),
+                                    RValue::Integer(i) => println!("{}", i.value),
+                                    RValue::String(s) => println!("{}", s.value), // Print without quotes
+                                    RValue::Bool(b) => println!("{}", b),
+                                    RValue::CoreLambda(_, _) => println!("<function>"),
+                                    RValue::Lambda(_) => println!("<function>"),
+                                    RValue::Builtin(_) => println!("<builtin>"),
+                                }
+                                RValue::Unit
+                            }
+                        }
+                    }
                     other => panic!("cannot call non-function value: {:?}", other),
                 }
             }

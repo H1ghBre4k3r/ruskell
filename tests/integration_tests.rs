@@ -1173,3 +1173,108 @@ fn e2e_recursive_power() {
         panic!("expected integer, got {:?}", result);
     }
 }
+
+// ============================================================================
+// Print Builtin Tests
+// ============================================================================
+
+#[test]
+fn e2e_print_integer() {
+    let input = r#"
+        main = do
+            print(42)
+            100
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 100);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_print_string() {
+    let input = r#"
+        main = do
+            print("Hello, World!")
+            ()
+        end
+    "#;
+
+    let result = run_program(input);
+    assert!(matches!(result, RValue::Unit));
+}
+
+#[test]
+fn e2e_print_bool() {
+    let input = r#"
+        main = do
+            print(true)
+            print(false)
+            ()
+        end
+    "#;
+
+    let result = run_program(input);
+    assert!(matches!(result, RValue::Unit));
+}
+
+#[test]
+fn e2e_print_unit() {
+    let input = r#"
+        main = do
+            print(())
+            42
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 42);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_print_polymorphic() {
+    // Test that print works with different types in same program
+    let input = r#"
+        main = do
+            print(42)
+            print("test")
+            print(true)
+            print(())
+            123
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 123);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_print_in_function() {
+    let input = r#"
+        helper x = do
+            print(x)
+            x + 10
+        end
+        
+        main = helper(5)
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 15);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
