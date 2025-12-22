@@ -1,0 +1,18 @@
+classify 0 0 = "origin"
+classify x 0 = "x-axis"
+classify 0 y = "y-axis"
+classify x y = "quadrant"
+
+add x y = x + y
+
+combine x y z = x + y * z
+
+main = do
+    origin := classify(0, 0)
+    xAxis := classify(5, 0)
+    yAxis := classify(0, 3)
+    quad := classify(2, 3)
+    sum := add(10, 20)
+    result := combine(1, 2, 3)
+    result
+end
