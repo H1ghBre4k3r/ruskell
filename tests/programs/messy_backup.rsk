@@ -1,0 +1,7 @@
+add x y=x+y
+multiply a b=a*b
+main=do x:=add(1,2)
+y:=multiply(x,3)
+z:=\a,b=>a+b
+result:=if x>0 then y else 0 end
+result end

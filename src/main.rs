@@ -1,6 +1,7 @@
 mod ast;
 mod core;
 mod desugar;
+mod fmt;
 mod interpreter;
 mod lexer;
 mod parser;
@@ -228,10 +229,64 @@ fn cmd_check(file: &str, verbose: bool) -> i32 {
     }
 }
 
-fn cmd_fmt(_file: &str, _in_place: bool) -> i32 {
-    eprintln!("Error: Code formatter not yet implemented");
-    eprintln!("This feature is planned for Phase 2 of the binary toolchain.");
-    1
+fn cmd_fmt(file: &str, in_place: bool) -> i32 {
+    // Read source
+    let source = match read_source_file(file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            return 2;
+        }
+    };
+
+    // Lex
+    let tokens = match Token::lex(&source) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("Lexer error: {}", e);
+            return 3;
+        }
+    };
+
+    // Parse
+    let mut state = ParseState::new(tokens);
+    let (program, errors) = parse(&mut state);
+
+    if !errors.is_empty() {
+        eprintln!("Found {} parse error(s):\n", errors.len());
+        for error in &errors {
+            eprintln!("{}\n", error);
+        }
+        return 4;
+    }
+
+    let program = match program {
+        Some(p) => p,
+        None => {
+            eprintln!("Failed to parse program");
+            return 4;
+        }
+    };
+
+    // Format the AST
+    let formatted = format!("{}", program);
+
+    // Write output
+    if in_place {
+        match fs::write(file, &formatted) {
+            Ok(_) => {
+                eprintln!("Formatted '{}'", file);
+                0
+            }
+            Err(e) => {
+                eprintln!("Failed to write file '{}': {}", file, e);
+                1
+            }
+        }
+    } else {
+        print!("{}", formatted);
+        0
+    }
 }
 
 fn cmd_repl() -> i32 {
