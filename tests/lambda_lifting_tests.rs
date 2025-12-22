@@ -67,7 +67,6 @@ fn parse_and_lift_function(input: &str) -> CoreLambda<()> {
 }
 
 #[test]
-#[ignore = "Requires interpreter support for lifted lambdas"]
 fn test_no_capture_lambda() {
     // Lambda with no captured variables should work correctly
     let result = run_lifted_program(
@@ -87,7 +86,6 @@ fn test_no_capture_lambda() {
 }
 
 #[test]
-#[ignore = "Requires interpreter support for lifted lambdas"]
 fn test_function_with_two_params() {
     // Two-parameter function should work (tests basic desugaring + lifting)
     let result = run_lifted_program(
@@ -118,7 +116,6 @@ fn test_lambda_structure_no_capture() {
 }
 
 #[test]
-#[ignore = "Requires interpreter support for lifted lambdas"]
 fn test_nested_function_params() {
     // Three-parameter function
     let result = run_lifted_program(
@@ -137,7 +134,6 @@ fn test_nested_function_params() {
 }
 
 #[test]
-#[ignore = "Requires interpreter support for lifted lambdas"]
 fn test_higher_order_function() {
     // Higher-order function that returns a closure
     let result = run_lifted_program(
@@ -226,7 +222,6 @@ fn test_local_bindings() {
 }
 
 #[test]
-#[ignore = "Requires interpreter support for lifted lambdas"]
 fn test_function_call_with_arithmetic() {
     let result = run_lifted_program(
         r#"
@@ -244,7 +239,6 @@ fn test_function_call_with_arithmetic() {
 }
 
 #[test]
-#[ignore = "Requires interpreter support for lifted lambdas"]
 fn test_recursive_function() {
     let result = run_lifted_program(
         r#"
@@ -329,7 +323,6 @@ fn test_logical_or() {
 }
 
 #[test]
-#[ignore = "Requires interpreter support for lifted lambdas"]
 fn test_pattern_matching_literals() {
     let result = run_lifted_program(
         r#"
