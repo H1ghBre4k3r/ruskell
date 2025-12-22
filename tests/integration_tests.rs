@@ -1173,3 +1173,199 @@ fn e2e_recursive_power() {
         panic!("expected integer, got {:?}", result);
     }
 }
+
+// ============================================================================
+// Print Builtin Tests
+// ============================================================================
+
+#[test]
+fn e2e_print_integer() {
+    let input = r#"
+        main = do
+            print(42)
+            100
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 100);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_print_string() {
+    let input = r#"
+        main = do
+            print("Hello, World!")
+            ()
+        end
+    "#;
+
+    let result = run_program(input);
+    assert!(matches!(result, RValue::Unit));
+}
+
+#[test]
+fn e2e_print_bool() {
+    let input = r#"
+        main = do
+            print(true)
+            print(false)
+            ()
+        end
+    "#;
+
+    let result = run_program(input);
+    assert!(matches!(result, RValue::Unit));
+}
+
+#[test]
+fn e2e_print_unit() {
+    let input = r#"
+        main = do
+            print(())
+            42
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 42);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_print_polymorphic() {
+    // Test that print works with different types in same program
+    let input = r#"
+        main = do
+            print(42)
+            print("test")
+            print(true)
+            print(())
+            123
+        end
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 123);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_print_in_function() {
+    let input = r#"
+        helper x = do
+            print(x)
+            x + 10
+        end
+        
+        main = helper(5)
+    "#;
+
+    let result = run_program(input);
+    if let RValue::Integer(i) = result {
+        assert_eq!(i.value, 15);
+    } else {
+        panic!("expected integer, got {:?}", result);
+    }
+}
+
+// ============================================================================
+// String Concatenation and ToString Tests
+// ============================================================================
+
+#[test]
+fn e2e_string_concat_basic() {
+    let input = r#"
+        main = do
+            s := "Hello" ++ " " ++ "World"
+            print(s)
+            ()
+        end
+    "#;
+
+    let result = run_program(input);
+    assert!(matches!(result, RValue::Unit));
+}
+
+#[test]
+fn e2e_to_string_integer() {
+    let input = r#"
+        main = toString(42)
+    "#;
+
+    let result = run_program(input);
+    if let RValue::String(s) = result {
+        assert_eq!(s.value, "42");
+    } else {
+        panic!("expected string, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_to_string_bool() {
+    let input = r#"
+        main = toString(true)
+    "#;
+
+    let result = run_program(input);
+    if let RValue::String(s) = result {
+        assert_eq!(s.value, "true");
+    } else {
+        panic!("expected string, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_to_string_unit() {
+    let input = r#"
+        main = toString(())
+    "#;
+
+    let result = run_program(input);
+    if let RValue::String(s) = result {
+        assert_eq!(s.value, "()");
+    } else {
+        panic!("expected string, got {:?}", result);
+    }
+}
+
+#[test]
+fn e2e_concat_with_to_string() {
+    let input = r#"
+        main = do
+            x := 42
+            s := "The answer is: " ++ toString(x)
+            print(s)
+            ()
+        end
+    "#;
+
+    let result = run_program(input);
+    assert!(matches!(result, RValue::Unit));
+}
+
+#[test]
+fn e2e_concat_complex() {
+    let input = r#"
+        main = do
+            x := 10
+            y := 20
+            s := toString(x) ++ " + " ++ toString(y) ++ " = " ++ toString(x + y)
+            print(s)
+            ()
+        end
+    "#;
+
+    let result = run_program(input);
+    assert!(matches!(result, RValue::Unit));
+}

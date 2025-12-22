@@ -8,6 +8,13 @@ use crate::core::CoreLambda;
 #[derive(Debug, Clone)]
 pub struct CapturedEnv<T>(pub HashMap<String, RValue<T>>);
 
+/// Builtin function identifiers
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Builtin {
+    Print,
+    ToString,
+}
+
 /// Runtime value representation
 #[derive(Debug, Clone)]
 pub enum RValue<T> {
@@ -18,4 +25,6 @@ pub enum RValue<T> {
     Lambda(Lambda<T>),
     /// Core lambda with captured environment (closure)
     CoreLambda(CoreLambda<T>, CapturedEnv<T>),
+    /// Builtin function
+    Builtin(Builtin),
 }

@@ -83,8 +83,15 @@ pub fn string_literal() -> BoxedParser<StringLiteral<()>> {
     BoxedParser::new(|state: &mut ParseState| match state.peek() {
         Some(Token::StringLiteral(_)) => {
             if let Token::StringLiteral(s) = state.advance().unwrap() {
+                // Strip surrounding quotes from the string literal
+                let value =
+                    if s.value.len() >= 2 && s.value.starts_with('"') && s.value.ends_with('"') {
+                        s.value[1..s.value.len() - 1].to_string()
+                    } else {
+                        s.value
+                    };
                 Ok(StringLiteral {
-                    value: s.value,
+                    value,
                     position: s.position,
                     info: (),
                 })

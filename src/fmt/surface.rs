@@ -359,7 +359,7 @@ fn binop_precedence(kind: BinOpKind) -> u8 {
         | BinOpKind::Gt
         | BinOpKind::LtEq
         | BinOpKind::GtEq => 3,
-        BinOpKind::Add | BinOpKind::Sub => 4,
+        BinOpKind::Add | BinOpKind::Sub | BinOpKind::Concat => 4,
         BinOpKind::Mul | BinOpKind::Div => 5,
     }
 }
@@ -378,6 +378,7 @@ fn binop_symbol(kind: BinOpKind) -> &'static str {
         BinOpKind::GtEq => ">=",
         BinOpKind::And => "&&",
         BinOpKind::Or => "||",
+        BinOpKind::Concat => "++",
     }
 }
 

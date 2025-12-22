@@ -24,6 +24,7 @@ pub fn run(CoreProgram { main, functions }: CoreProgram<()>) {
         RValue::Bool(b) => process::exit(if b { 0 } else { 1 }),
         RValue::String(_string_literal) => todo!("string return not implemented"),
         RValue::CoreLambda(_, _) => process::exit(0),
+        RValue::Builtin(_) => process::exit(0),
         // Legacy: shouldn't happen with Core AST
         RValue::Lambda(_) => process::exit(0),
     }

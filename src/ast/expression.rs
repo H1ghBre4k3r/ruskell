@@ -95,6 +95,7 @@ pub enum BinOpKind {
     GtEq,
     And,
     Or,
+    Concat,
 }
 
 /// Unary operator kinds
