@@ -1,0 +1,7 @@
+fib 0 x y = 0
+fib 1 x y = 1
+fib n x y = do 
+    first := fib(n - 1, y, x)
+    second := fib(n - 2, x, y)
+    first + second
+end

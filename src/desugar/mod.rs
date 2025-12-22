@@ -147,68 +147,25 @@ fn build_nested_match(
         .map(|clause| {
             let pattern = clause.patterns[param_index].clone();
 
-            // If this is the last parameter, use the clause body
-            // Otherwise, create another nested match for the next parameter
+            // Build the body, wrapping remaining parameters if needed
             let body = if param_index == param_names.len() - 1 {
-                // Last parameter - use the clause body
-                match clause.body {
-                    ast::expression::LambdaBody::Expression(expr) => *expr,
-                    ast::expression::LambdaBody::Block(stmts) => {
-                        // Multi-statement block: wrap in immediately-invoked lambda
-                        // do ... end becomes (\() => do ... end)()
-                        let lambda = ast::expression::Lambda {
-                            params: vec![ast::expression::LambdaParam::Unit(
-                                ast::expression::Unit {
-                                    position: clause.position.clone(),
-                                    info: (),
-                                },
-                            )],
-                            body: ast::expression::LambdaBody::Block(stmts),
-                            position: clause.position.clone(),
-                            info: (),
-                        };
-
-                        ast::expression::Expression::FunctionCall(ast::expression::FunctionCall {
-                            func: Box::new(ast::expression::Expression::Lambda(lambda)),
-                            args: vec![ast::expression::Expression::Unit(ast::expression::Unit {
-                                position: clause.position.clone(),
-                                info: (),
-                            })],
-                            position: clause.position.clone(),
-                            info: (),
-                        })
-                    }
-                }
+                // Last parameter - use the clause body directly
+                clause_body_to_expression(clause.body, clause.position.clone())
             } else {
-                // Not the last parameter - we need to continue matching on remaining parameters
-                // For now, just use the body (this is incomplete for multi-param pattern matching)
-                match clause.body {
-                    ast::expression::LambdaBody::Expression(expr) => *expr,
-                    ast::expression::LambdaBody::Block(stmts) => {
-                        // Multi-statement block: wrap in immediately-invoked lambda
-                        let lambda = ast::expression::Lambda {
-                            params: vec![ast::expression::LambdaParam::Unit(
-                                ast::expression::Unit {
-                                    position: clause.position.clone(),
-                                    info: (),
-                                },
-                            )],
-                            body: ast::expression::LambdaBody::Block(stmts),
-                            position: clause.position.clone(),
-                            info: (),
-                        };
+                // Not the last parameter - wrap body in lambdas for remaining pattern parameters
+                // Collect remaining patterns and their corresponding argument names
+                let remaining_patterns = &clause.patterns[param_index + 1..];
+                let remaining_args = &param_names[param_index + 1..];
 
-                        ast::expression::Expression::FunctionCall(ast::expression::FunctionCall {
-                            func: Box::new(ast::expression::Expression::Lambda(lambda)),
-                            args: vec![ast::expression::Expression::Unit(ast::expression::Unit {
-                                position: clause.position.clone(),
-                                info: (),
-                            })],
-                            position: clause.position.clone(),
-                            info: (),
-                        })
-                    }
+                let mut body_expr = clause_body_to_expression(clause.body, clause.position.clone());
+
+                // Wrap in lambdas for each remaining pattern parameter (in reverse order)
+                for (pat, arg_name) in remaining_patterns.iter().zip(remaining_args.iter()).rev() {
+                    body_expr =
+                        wrap_pattern_as_lambda(pat.clone(), body_expr, arg_name, position.clone());
                 }
+
+                body_expr
             };
 
             ast::pattern::MatchArm {
@@ -229,6 +186,80 @@ fn build_nested_match(
     };
 
     desugar_match(match_expr)
+}
+
+/// Convert a clause body to an expression
+fn clause_body_to_expression(
+    body: ast::expression::LambdaBody<()>,
+    position: lachs::Span,
+) -> ast::expression::Expression<()> {
+    match body {
+        ast::expression::LambdaBody::Expression(expr) => *expr,
+        ast::expression::LambdaBody::Block(stmts) => {
+            // Multi-statement block: wrap in immediately-invoked lambda
+            // do ... end becomes (\() => do ... end)()
+            let lambda = ast::expression::Lambda {
+                params: vec![ast::expression::LambdaParam::Unit(ast::expression::Unit {
+                    position: position.clone(),
+                    info: (),
+                })],
+                body: ast::expression::LambdaBody::Block(stmts),
+                position: position.clone(),
+                info: (),
+            };
+
+            ast::expression::Expression::FunctionCall(ast::expression::FunctionCall {
+                func: Box::new(ast::expression::Expression::Lambda(lambda)),
+                args: vec![ast::expression::Expression::Unit(ast::expression::Unit {
+                    position: position.clone(),
+                    info: (),
+                })],
+                position: position.clone(),
+                info: (),
+            })
+        }
+    }
+}
+
+/// Wrap an expression in a lambda that binds a pattern variable, then applies it to the argument
+/// For pattern `x` and arg `__arg1`: body becomes `(\x => body)(__arg1)`
+fn wrap_pattern_as_lambda(
+    pattern: ast::pattern::Pattern<()>,
+    body: ast::expression::Expression<()>,
+    arg_name: &str,
+    position: lachs::Span,
+) -> ast::expression::Expression<()> {
+    use ast::pattern::Pattern;
+
+    match pattern {
+        // Variable pattern: create lambda binding
+        Pattern::Ident(ident) => {
+            let lambda = ast::expression::Lambda {
+                params: vec![ast::expression::LambdaParam::Ident(ident)],
+                body: ast::expression::LambdaBody::Expression(Box::new(body)),
+                position: position.clone(),
+                info: (),
+            };
+
+            ast::expression::Expression::FunctionCall(ast::expression::FunctionCall {
+                func: Box::new(ast::expression::Expression::Lambda(lambda)),
+                args: vec![ast::expression::Expression::Ident(ast::expression::Ident {
+                    value: arg_name.to_string(),
+                    position: position.clone(),
+                    info: (),
+                })],
+                position: position.clone(),
+                info: (),
+            })
+        }
+        // Unit pattern: no binding needed, just return body
+        Pattern::Literal(ast::pattern::LiteralPattern::Unit(_, _)) => body,
+        // Wildcard pattern: no binding needed, just return body
+        Pattern::Wildcard(_) => body,
+        // Other literal patterns: these would require a match, but for now just return body
+        // (This case shouldn't happen in well-formed multi-param functions)
+        Pattern::Literal(_) => body,
+    }
 }
 
 /// Build nested lambdas: \arg0 => \arg1 => ... => body

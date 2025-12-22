@@ -321,23 +321,23 @@ pub fn program() -> BoxedParser<Program<()>> {
 
         // Find main function - if not found, use first function as placeholder
         // The validator will catch this and report MissingMain error
-        let main = function_defs
-            .iter()
-            .find(|f| match f {
-                ast::FunctionDef::Single(func) => func.name.value == "main",
-                ast::FunctionDef::Multi { name, .. } => name.value == "main",
-            })
-            .cloned()
-            .or_else(|| function_defs.first().cloned())
-            .ok_or_else(|| ParseError::new("program must have at least one function"))?;
+        let main_pos = function_defs.iter().position(|f| match f {
+            ast::FunctionDef::Single(func) => func.name.value == "main",
+            ast::FunctionDef::Multi { name, .. } => name.value == "main",
+        });
 
-        let other_functions = function_defs
-            .into_iter()
-            .filter(|f| match f {
-                ast::FunctionDef::Single(func) => func.name.value != "main",
-                ast::FunctionDef::Multi { name, .. } => name.value != "main",
-            })
-            .collect();
+        let (main, other_functions) = if let Some(pos) = main_pos {
+            // Found main - remove it and use rest as other functions
+            let main = function_defs.remove(pos);
+            (main, function_defs)
+        } else {
+            // No main found - use first function as main placeholder
+            if function_defs.is_empty() {
+                return Err(ParseError::new("program must have at least one function"));
+            }
+            let main = function_defs.remove(0);
+            (main, function_defs)
+        };
 
         Ok(Program {
             main,
