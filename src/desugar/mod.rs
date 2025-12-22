@@ -123,7 +123,7 @@ fn build_pattern_matching_lambda(
 }
 
 /// Build nested match expressions for multiple parameters
-/// Groups clauses by first parameter pattern and creates nested matches for remaining parameters.
+/// Processes clauses sequentially, checking all parameters of each clause before trying the next.
 fn build_nested_match(
     clauses: Vec<ast::pattern::FunctionClause<()>>,
     param_names: &[String],
@@ -134,98 +134,78 @@ fn build_nested_match(
         panic!("Parameter index out of bounds");
     }
 
-    // Group clauses by their pattern at the current parameter index
-    let grouped = group_clauses_by_pattern(&clauses, param_index);
-
-    // Build the nested if-then-else structure directly in Core AST
-    build_pattern_dispatch(grouped, param_names, param_index, position)
+    // Build clause-by-clause matching
+    build_clause_by_clause(clauses, param_names, position)
 }
 
-/// Build the dispatch logic for grouped clauses
-fn build_pattern_dispatch(
-    grouped: Vec<(
-        ast::pattern::Pattern<()>,
-        Vec<ast::pattern::FunctionClause<()>>,
-    )>,
+/// Build pattern matching by processing clauses sequentially
+/// Each clause becomes: if (all patterns match) then body else (try next clause)
+fn build_clause_by_clause(
+    clauses: Vec<ast::pattern::FunctionClause<()>>,
     param_names: &[String],
-    param_index: usize,
     position: lachs::Span,
 ) -> CoreExpr<()> {
-    if grouped.is_empty() {
-        panic!("No clauses to dispatch");
+    if clauses.is_empty() {
+        // No clauses left - this shouldn't happen in well-formed programs
+        return CoreExpr::Unit(CoreUnit { position, info: () });
     }
 
-    let mut result: Option<CoreExpr<()>> = None;
+    let mut clauses_iter = clauses.into_iter();
+    let first_clause = clauses_iter.next().unwrap();
+    let remaining_clauses: Vec<_> = clauses_iter.collect();
 
-    // Process patterns in reverse order so we build the if-then-else chain correctly
-    for (pattern, matching_clauses) in grouped.into_iter().rev() {
-        let then_branch = if param_index == param_names.len() - 1 {
-            // Last parameter - use the clause body directly
-            if matching_clauses.len() != 1 {
-                panic!("Multiple clauses with same pattern signature");
-            }
-            let body_expr = clause_body_to_expression(
-                matching_clauses[0].body.clone(),
-                matching_clauses[0].position.clone(),
-            );
-            desugar_expr(body_expr)
-        } else {
-            // Not the last parameter
-            match &pattern {
-                ast::pattern::Pattern::Literal(_) => {
-                    // Literal pattern: recursively match on next parameter
-                    build_nested_match(
-                        matching_clauses,
-                        param_names,
-                        param_index + 1,
-                        position.clone(),
-                    )
-                }
-                ast::pattern::Pattern::Ident(_) | ast::pattern::Pattern::Wildcard(_) => {
-                    // Variable/wildcard pattern
-                    if matching_clauses.len() == 1 {
-                        // Single clause: bind the variable and wrap remaining patterns
-                        let clause = &matching_clauses[0];
+    // Build the condition and body for the first clause
+    let (condition, bindings) =
+        build_clause_condition_and_bindings(&first_clause.patterns, param_names, position.clone());
 
-                        // Wrap body with lambda bindings for all remaining pattern parameters
-                        let remaining_patterns = &clause.patterns[param_index + 1..];
-                        let remaining_args = &param_names[param_index + 1..];
+    // Build the clause body with variable bindings applied
+    let body = clause_body_to_expression(first_clause.body, first_clause.position.clone());
+    let body_with_bindings = apply_bindings(bindings, desugar_expr(body), position.clone());
 
-                        let mut body_expr =
-                            clause_body_to_expression(clause.body.clone(), clause.position.clone());
+    // Build the else branch (remaining clauses)
+    let else_branch = if remaining_clauses.is_empty() {
+        // No more clauses - return unit (non-exhaustive match)
+        CoreExpr::Unit(CoreUnit {
+            position: position.clone(),
+            info: (),
+        })
+    } else {
+        build_clause_by_clause(remaining_clauses, param_names, position.clone())
+    };
 
-                        // Wrap in lambdas for each remaining pattern parameter (in reverse order)
-                        for (pat, arg_name) in
-                            remaining_patterns.iter().zip(remaining_args.iter()).rev()
-                        {
-                            body_expr = wrap_pattern_as_lambda(
-                                pat.clone(),
-                                body_expr,
-                                arg_name,
-                                position.clone(),
-                            );
-                        }
+    // Combine into if-then-else (or just return body if condition is always true)
+    match condition {
+        Some(cond) => CoreExpr::IfThenElse(CoreIfThenElse {
+            condition: Box::new(cond),
+            then_expr: Box::new(body_with_bindings),
+            else_expr: Box::new(else_branch),
+            position,
+            info: (),
+        }),
+        None => {
+            // All patterns are variables/wildcards - always matches, no condition needed
+            body_with_bindings
+        }
+    }
+}
 
-                        desugar_expr(body_expr)
-                    } else {
-                        // Multiple clauses: recursively match on next parameter
-                        // The variable binding will happen when we process this pattern in the outer match
-                        build_nested_match(
-                            matching_clauses,
-                            param_names,
-                            param_index + 1,
-                            position.clone(),
-                        )
-                    }
-                }
-            }
-        };
+/// Build the condition that checks if all patterns in a clause match
+/// Returns (optional condition, variable bindings)
+/// If all patterns are variables/wildcards, condition is None (always matches)
+fn build_clause_condition_and_bindings(
+    patterns: &[ast::pattern::Pattern<()>],
+    param_names: &[String],
+    position: lachs::Span,
+) -> (Option<CoreExpr<()>>, Vec<(String, String)>) {
+    let mut conditions = Vec::new();
+    let mut bindings = Vec::new();
 
-        let new_result = match &pattern {
+    for (pattern, param_name) in patterns.iter().zip(param_names.iter()) {
+        match pattern {
             ast::pattern::Pattern::Literal(lit) => {
                 // Create equality check for literal pattern
                 let scrutinee = CoreExpr::Ident(CoreIdent {
-                    value: param_names[param_index].clone(),
+                    value: param_name.clone(),
                     position: position.clone(),
                     info: (),
                 });
@@ -258,116 +238,91 @@ fn build_pattern_dispatch(
                     }),
                 };
 
-                let condition = CoreExpr::BinaryOp(CoreBinaryOp {
+                conditions.push(CoreExpr::BinaryOp(CoreBinaryOp {
                     op: ast::expression::BinOpKind::Eq,
                     left: Box::new(scrutinee),
                     right: Box::new(literal_expr),
                     position: position.clone(),
                     info: (),
-                });
-
-                let else_branch = result.unwrap_or_else(|| {
-                    CoreExpr::Unit(CoreUnit {
-                        position: position.clone(),
-                        info: (),
-                    })
-                });
-
-                CoreExpr::IfThenElse(CoreIfThenElse {
-                    condition: Box::new(condition),
-                    then_expr: Box::new(then_branch),
-                    else_expr: Box::new(else_branch),
-                    position: position.clone(),
-                    info: (),
-                })
+                }));
             }
             ast::pattern::Pattern::Ident(id) => {
-                // Variable pattern: bind the parameter value to the pattern variable
-                let lambda = CoreLambda {
-                    param: CoreLambdaParam::Ident(CoreIdent {
-                        value: id.value.clone(),
-                        position: id.position.clone(),
-                        info: (),
-                    }),
-                    body: CoreLambdaBody::Expression(Box::new(then_branch)),
-                    position: position.clone(),
-                    info: (),
-                };
-
-                CoreExpr::FunctionCall(CoreFunctionCall {
-                    func: Box::new(CoreExpr::Lambda(lambda)),
-                    arg: Box::new(CoreExpr::Ident(CoreIdent {
-                        value: param_names[param_index].clone(),
-                        position: position.clone(),
-                        info: (),
-                    })),
-                    position: position.clone(),
-                    info: (),
-                })
+                // Variable pattern: bind the parameter value to this name
+                bindings.push((id.value.clone(), param_name.clone()));
             }
             ast::pattern::Pattern::Wildcard(_) => {
-                // Wildcard pattern: just use the then branch directly
-                then_branch
-            }
-        };
-
-        result = Some(new_result);
-    }
-
-    result.expect("Should have at least one pattern")
-}
-
-/// Group clauses by their pattern at the given parameter index
-/// Returns a Vec of (pattern, clauses) maintaining order of first occurrence
-fn group_clauses_by_pattern(
-    clauses: &[ast::pattern::FunctionClause<()>],
-    param_index: usize,
-) -> Vec<(
-    ast::pattern::Pattern<()>,
-    Vec<ast::pattern::FunctionClause<()>>,
-)> {
-    use std::collections::HashMap;
-
-    let mut groups: Vec<(
-        ast::pattern::Pattern<()>,
-        Vec<ast::pattern::FunctionClause<()>>,
-    )> = Vec::new();
-    let mut pattern_indices: HashMap<String, usize> = HashMap::new();
-
-    for clause in clauses {
-        let pattern = &clause.patterns[param_index];
-        let pattern_key = pattern_to_key(pattern);
-
-        match pattern_indices.get(&pattern_key) {
-            Some(&idx) => {
-                // Pattern already seen, add clause to existing group
-                groups[idx].1.push(clause.clone());
-            }
-            None => {
-                // New pattern, create new group
-                pattern_indices.insert(pattern_key, groups.len());
-                groups.push((pattern.clone(), vec![clause.clone()]));
+                // Wildcard: no condition, no binding
             }
         }
     }
 
-    groups
+    // Combine all conditions with AND
+    let combined_condition = if conditions.is_empty() {
+        None
+    } else if conditions.len() == 1 {
+        Some(conditions.into_iter().next().unwrap())
+    } else {
+        Some(
+            conditions
+                .into_iter()
+                .reduce(|acc, cond| {
+                    CoreExpr::BinaryOp(CoreBinaryOp {
+                        op: ast::expression::BinOpKind::And,
+                        left: Box::new(acc),
+                        right: Box::new(cond),
+                        position: position.clone(),
+                        info: (),
+                    })
+                })
+                .unwrap(),
+        )
+    };
+
+    (combined_condition, bindings)
 }
 
-/// Generate a unique key for a pattern (for grouping purposes)
-fn pattern_to_key(pattern: &ast::pattern::Pattern<()>) -> String {
-    use ast::pattern::{LiteralPattern, Pattern};
-
-    match pattern {
-        Pattern::Literal(lit) => match lit {
-            LiteralPattern::Integer(val, _, _) => format!("int:{}", val),
-            LiteralPattern::String(val, _, _) => format!("string:{}", val),
-            LiteralPattern::Boolean(val, _, _) => format!("bool:{}", val),
-            LiteralPattern::Unit(_, _) => "unit".to_string(),
-        },
-        Pattern::Ident(id) => format!("var:{}", id.value),
-        Pattern::Wildcard(_) => "wildcard".to_string(),
+/// Apply variable bindings to an expression
+/// Wraps the expression in nested lambda applications: (\var1 => \var2 => expr)(arg1)(arg2)
+fn apply_bindings(
+    bindings: Vec<(String, String)>,
+    expr: CoreExpr<()>,
+    position: lachs::Span,
+) -> CoreExpr<()> {
+    if bindings.is_empty() {
+        return expr;
     }
+
+    // Build nested lambdas for all bindings
+    let mut lambda_body = expr;
+    for (var_name, _) in bindings.iter().rev() {
+        lambda_body = CoreExpr::Lambda(CoreLambda {
+            param: CoreLambdaParam::Ident(CoreIdent {
+                value: var_name.clone(),
+                position: position.clone(),
+                info: (),
+            }),
+            body: CoreLambdaBody::Expression(Box::new(lambda_body)),
+            position: position.clone(),
+            info: (),
+        });
+    }
+
+    // Apply all arguments
+    let mut result = lambda_body;
+    for (_, arg_name) in bindings.iter() {
+        result = CoreExpr::FunctionCall(CoreFunctionCall {
+            func: Box::new(result),
+            arg: Box::new(CoreExpr::Ident(CoreIdent {
+                value: arg_name.clone(),
+                position: position.clone(),
+                info: (),
+            })),
+            position: position.clone(),
+            info: (),
+        });
+    }
+
+    result
 }
 
 /// Convert a clause body to an expression
@@ -400,47 +355,6 @@ fn clause_body_to_expression(
                 info: (),
             })
         }
-    }
-}
-
-/// Wrap an expression in a lambda that binds a pattern variable, then applies it to the argument
-/// For pattern `x` and arg `__arg1`: body becomes `(\x => body)(__arg1)`
-fn wrap_pattern_as_lambda(
-    pattern: ast::pattern::Pattern<()>,
-    body: ast::expression::Expression<()>,
-    arg_name: &str,
-    position: lachs::Span,
-) -> ast::expression::Expression<()> {
-    use ast::pattern::Pattern;
-
-    match pattern {
-        // Variable pattern: create lambda binding
-        Pattern::Ident(ident) => {
-            let lambda = ast::expression::Lambda {
-                params: vec![ast::expression::LambdaParam::Ident(ident)],
-                body: ast::expression::LambdaBody::Expression(Box::new(body)),
-                position: position.clone(),
-                info: (),
-            };
-
-            ast::expression::Expression::FunctionCall(ast::expression::FunctionCall {
-                func: Box::new(ast::expression::Expression::Lambda(lambda)),
-                args: vec![ast::expression::Expression::Ident(ast::expression::Ident {
-                    value: arg_name.to_string(),
-                    position: position.clone(),
-                    info: (),
-                })],
-                position: position.clone(),
-                info: (),
-            })
-        }
-        // Unit pattern: no binding needed, just return body
-        Pattern::Literal(ast::pattern::LiteralPattern::Unit(_, _)) => body,
-        // Wildcard pattern: no binding needed, just return body
-        Pattern::Wildcard(_) => body,
-        // Other literal patterns: these would require a match, but for now just return body
-        // (This case shouldn't happen in well-formed multi-param functions)
-        Pattern::Literal(_) => body,
     }
 }
 
