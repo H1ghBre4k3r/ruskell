@@ -8,10 +8,10 @@ use std::fmt::{self, Display, Write};
 use crate::ast::{
     FunctionDef, Program,
     expression::{
-        BinOpKind, BinaryOp, Boolean, Expression, FunctionCall, Ident, IfThenElse, Integer, Lambda,
-        LambdaBody, LambdaParam, StringLiteral, UnaryOp, UnaryOpKind, Unit,
+        BinOpKind, BinaryOp, Expression, FunctionCall, IfThenElse, Lambda, LambdaBody, LambdaParam,
+        UnaryOp, UnaryOpKind,
     },
-    pattern::{FunctionClause, LiteralPattern, Match, MatchArm, Pattern, Wildcard},
+    pattern::{FunctionClause, LiteralPattern, Match, MatchArm, Pattern},
     statement::Statement,
 };
 
@@ -199,20 +199,18 @@ fn format_lambda_expression<T>(lambda: &Lambda<T>, fmt: &mut Formatter) {
 fn format_function_call<T>(call: &FunctionCall<T>, fmt: &mut Formatter) {
     // Check if this is an immediately-invoked do-block: (\() => do ... end)(())
     // If so, just print the do-block directly
-    if let Expression::Lambda(lambda) = &*call.func {
-        if let LambdaBody::Block(stmts) = &lambda.body {
-            // Check if it's a unit lambda being called with unit
-            if lambda.params.len() == 1 {
-                if let LambdaParam::Unit(_) = &lambda.params[0] {
-                    if call.args.len() == 1 {
-                        if matches!(&call.args[0], Expression::Unit(_)) {
-                            // This is (\() => do ... end)(()), just print do ... end
-                            format_block(stmts, fmt);
-                            return;
-                        }
-                    }
-                }
-            }
+    if let Expression::Lambda(lambda) = &*call.func
+        && let LambdaBody::Block(stmts) = &lambda.body
+    {
+        // Check if it's a unit lambda being called with unit
+        if lambda.params.len() == 1
+            && let LambdaParam::Unit(_) = &lambda.params[0]
+            && call.args.len() == 1
+            && matches!(&call.args[0], Expression::Unit(_))
+        {
+            // This is (\() => do ... end)(()), just print do ... end
+            format_block(stmts, fmt);
+            return;
         }
     }
 
@@ -286,18 +284,14 @@ fn format_if_then_else<T>(ite: &IfThenElse<T>, fmt: &mut Formatter) {
 
 // Helper to check if an expression is a do-block (immediately-invoked unit lambda)
 fn is_do_block_expression<T>(expr: &Expression<T>) -> bool {
-    if let Expression::FunctionCall(call) = expr {
-        if let Expression::Lambda(lambda) = &*call.func {
-            if let LambdaBody::Block(_) = &lambda.body {
-                if lambda.params.len() == 1 {
-                    if let LambdaParam::Unit(_) = &lambda.params[0] {
-                        if call.args.len() == 1 {
-                            return matches!(&call.args[0], Expression::Unit(_));
-                        }
-                    }
-                }
-            }
-        }
+    if let Expression::FunctionCall(call) = expr
+        && let Expression::Lambda(lambda) = &*call.func
+        && let LambdaBody::Block(_) = &lambda.body
+        && lambda.params.len() == 1
+        && let LambdaParam::Unit(_) = &lambda.params[0]
+        && call.args.len() == 1
+    {
+        return matches!(&call.args[0], Expression::Unit(_));
     }
     false
 }

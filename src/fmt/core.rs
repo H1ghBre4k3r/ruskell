@@ -7,9 +7,8 @@ use std::fmt::{self, Display};
 
 use crate::ast::expression::{BinOpKind, UnaryOpKind};
 use crate::core::{
-    CoreAssignment, CoreBinaryOp, CoreBoolean, CoreExpr, CoreFunction, CoreFunctionCall, CoreIdent,
-    CoreIfThenElse, CoreInteger, CoreLambda, CoreLambdaBody, CoreLambdaParam, CoreProgram,
-    CoreStatement, CoreString, CoreUnaryOp, CoreUnit,
+    CoreBinaryOp, CoreExpr, CoreFunction, CoreFunctionCall, CoreIfThenElse, CoreLambda,
+    CoreLambdaBody, CoreLambdaParam, CoreProgram, CoreStatement, CoreUnaryOp,
 };
 
 const INDENT: &str = "  ";

@@ -1,0 +1,8 @@
+factorial 0 = 1
+factorial n = do
+  prev := factorial(n - 1)
+  result := n * prev
+  result
+end
+
+main = factorial(5)

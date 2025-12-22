@@ -175,17 +175,17 @@ pub fn if_then_else() -> BoxedParser<Expression<()>> {
         let start = expect_if().parse(state)?.pos();
         let condition = expression().parse(state)?;
         expect_then().parse(state)?;
-        
+
         // Check if then-branch is a do-block
         let then_is_do_block = matches!(state.peek(), Some(Token::Do(_)));
         let then_expr = expression().parse(state)?;
-        
+
         expect_else().parse(state)?;
-        
-        // Check if else-branch is a do-block  
+
+        // Check if else-branch is a do-block
         let else_is_do_block = matches!(state.peek(), Some(Token::Do(_)));
         let else_expr = expression().parse(state)?;
-        
+
         // Only require 'end' if at least one branch is NOT a do-block
         let end = if then_is_do_block && else_is_do_block {
             // Both branches are do-blocks, 'end' is optional
