@@ -63,7 +63,7 @@ impl<T> Display for CoreProgram<T> {
         formatter.write_newline();
         formatter.write_str("-- Note: Multi-arg calls are now nested single-arg calls");
         formatter.write_newline();
-        formatter.write_str("-- Note: Lambdas with captures are lifted: \\x => body becomes (\\a => \\x => body)(a)");
+        formatter.write_str("-- Note: Lambdas extracted to standalone functions (lambda_N)");
         formatter.write_newline();
         formatter.write_newline();
 

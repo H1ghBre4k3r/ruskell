@@ -1,21 +1,9 @@
-//! Lambda Lifting - Extract closures to standalone top-level functions
+//! Lambda Lifting - Extract lambdas to standalone top-level functions
 //!
-//! This module implements smart lambda lifting by extracting lambda expressions
-//! that capture free variables to standalone top-level functions, making all
-//! captures explicit as parameters.
+//! This module implements true lambda lifting by extracting all lambda expressions
+//! to standalone top-level functions, making all captures explicit as parameters.
 //!
-//! **Key distinction:**
-//! - **Parameter lambdas** (from multi-param functions) are preserved
-//! - **Closures** (lambdas that capture variables) are extracted
-//!
-//! Example - multi-parameter function (parameter lambdas preserved):
-//! ```ruskell
-//! add x y = x + y
-//! ```
-//! After desugaring: `add = \x => \y => x + y`
-//! After lifting: **unchanged** (no captures, just parameter structure)
-//!
-//! Example - closure (extracted and captures made explicit):
+//! Example transformation:
 //! ```ruskell
 //! main = do
 //!     a := 1
@@ -26,11 +14,11 @@
 //!
 //! After lifting:
 //! ```ruskell
-//! lambda_0 a x = x + a
+//! lambda_1 a x = x + a
 //!
 //! main = do
 //!     a := 1
-//!     f := lambda_0(a)
+//!     f := lambda_1(a)
 //!     f(5)
 //! end
 //! ```
@@ -44,7 +32,7 @@ use crate::core::*;
 static LAMBDA_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 /// Reset the lambda counter (useful for testing)
-fn reset_lambda_counter() {
+pub fn reset_lambda_counter() {
     LAMBDA_COUNTER.store(0, Ordering::SeqCst);
 }
 
@@ -74,7 +62,7 @@ impl LiftContext {
 /// Lift all lambdas in a program to top-level functions
 pub fn lift_program(program: CoreProgram<()>) -> CoreProgram<()> {
     reset_lambda_counter();
-
+    
     // Collect all global function names
     let mut global_names: HashSet<String> = HashSet::new();
     global_names.insert(program.main.name.value.clone());
@@ -83,20 +71,20 @@ pub fn lift_program(program: CoreProgram<()>) -> CoreProgram<()> {
     }
 
     let mut ctx = LiftContext::new(global_names);
-
+    
     // Lift main function
     let main = lift_function(&program.main, &mut ctx);
-
+    
     // Lift other functions
     let mut functions: Vec<CoreFunction<()>> = program
         .functions
-        .iter()
-        .map(|f| lift_function(f, &mut ctx))
+        .into_iter()
+        .map(|f| lift_function(&f, &mut ctx))
         .collect();
-
-    // Add extracted lambdas to the function list
+    
+    // Add lifted lambdas to the function list
     functions.extend(ctx.lifted_functions);
-
+    
     CoreProgram { main, functions }
 }
 
@@ -111,11 +99,11 @@ fn lift_function(func: &CoreFunction<()>, ctx: &mut LiftContext) -> CoreFunction
 /// Lift a function's lambda, treating nested parameter lambdas specially
 fn lift_function_lambda(lambda: &CoreLambda<()>, ctx: &mut LiftContext) -> CoreLambda<()> {
     // For function lambdas, we recursively preserve the parameter structure
-    // but extract any lambdas in the body
+    // but lift any lambdas in the body
     match &lambda.body {
         CoreLambdaBody::Expression(expr) => {
             // If the body is another lambda, it's part of the parameter list (from desugaring)
-            // Don't extract it, but recursively process it
+            // Don't lift it, but recursively process it
             if matches!(expr.as_ref(), CoreExpr::Lambda(_)) {
                 let lifted_body = match expr.as_ref() {
                     CoreExpr::Lambda(inner_lambda) => {
@@ -130,7 +118,7 @@ fn lift_function_lambda(lambda: &CoreLambda<()>, ctx: &mut LiftContext) -> CoreL
                     info: (),
                 }
             } else {
-                // Body is not a lambda - extract any lambdas within it
+                // Body is not a lambda - lift any lambdas within it
                 CoreLambda {
                     param: lambda.param.clone(),
                     body: CoreLambdaBody::Expression(Box::new(lift_expr(expr.as_ref(), ctx))),
@@ -237,175 +225,58 @@ fn free_vars_expr(expr: &CoreExpr<()>, globals: &HashSet<String>) -> HashSet<Str
     }
 }
 
-/// Lift all lambdas in a statement
-fn lift_statement(stmt: &CoreStatement<()>, ctx: &mut LiftContext) -> CoreStatement<()> {
-    match stmt {
-        CoreStatement::Assignment(assign) => CoreStatement::Assignment(CoreAssignment {
-            name: assign.name.clone(),
-            value: Box::new(lift_expr(&assign.value, ctx)),
-            position: assign.position.clone(),
-            info: (),
-        }),
-        CoreStatement::Expression(expr) => CoreStatement::Expression(lift_expr(expr, ctx)),
-    }
-}
-
-/// Recursively lift all lambdas in an expression, extracting them to standalone functions
-fn lift_expr(expr: &CoreExpr<()>, ctx: &mut LiftContext) -> CoreExpr<()> {
-    match expr {
-        CoreExpr::Lambda(lambda) => {
-            // Extract this lambda to a standalone function
-            extract_lambda(lambda, ctx)
-        }
-        CoreExpr::FunctionCall(call) => CoreExpr::FunctionCall(CoreFunctionCall {
-            func: Box::new(lift_expr(&call.func, ctx)),
-            arg: Box::new(lift_expr(&call.arg, ctx)),
-            position: call.position.clone(),
-            info: (),
-        }),
-        CoreExpr::BinaryOp(binop) => CoreExpr::BinaryOp(CoreBinaryOp {
-            op: binop.op,
-            left: Box::new(lift_expr(&binop.left, ctx)),
-            right: Box::new(lift_expr(&binop.right, ctx)),
-            position: binop.position.clone(),
-            info: (),
-        }),
-        CoreExpr::UnaryOp(unop) => CoreExpr::UnaryOp(CoreUnaryOp {
-            op: unop.op,
-            operand: Box::new(lift_expr(&unop.operand, ctx)),
-            position: unop.position.clone(),
-            info: (),
-        }),
-        CoreExpr::IfThenElse(if_expr) => CoreExpr::IfThenElse(CoreIfThenElse {
-            condition: Box::new(lift_expr(&if_expr.condition, ctx)),
-            then_expr: Box::new(lift_expr(&if_expr.then_expr, ctx)),
-            else_expr: Box::new(lift_expr(&if_expr.else_expr, ctx)),
-            position: if_expr.position.clone(),
-            info: (),
-        }),
-        // Literals and identifiers remain unchanged
-        CoreExpr::Unit(_) | CoreExpr::Integer(_) | CoreExpr::String(_) | CoreExpr::Boolean(_) => {
-            expr.clone()
-        }
-        CoreExpr::Ident(_) => expr.clone(),
-    }
-}
-
-/// Extract a lambda to a standalone top-level function
-fn extract_lambda(lambda: &CoreLambda<()>, ctx: &mut LiftContext) -> CoreExpr<()> {
-    // Compute free variables (captures)
-    let free = free_vars_lambda(lambda, &ctx.globals);
-
-    // Generate a unique name for this lambda
-    let lambda_name = generate_lambda_name();
+/// Lift a lambda: prepend captured variables as parameters (excluding globals)
+fn lift_lambda_with_globals(lambda: CoreLambda<()>, globals: &HashSet<String>) -> CoreLambda<()> {
+    let free = free_vars_lambda(&lambda, globals);
 
     if free.is_empty() {
-        // No captures - create a simple function
-        let new_function = CoreFunction {
-            name: CoreIdent {
-                value: lambda_name.clone(),
-                position: lambda.position.clone(),
-                info: (),
-            },
-            lambda: lift_lambda_body(lambda, ctx),
-        };
-
-        ctx.lifted_functions.push(new_function);
-
-        // Replace with reference to the new function
-        CoreExpr::Ident(CoreIdent {
-            value: lambda_name,
-            position: lambda.position.clone(),
-            info: (),
-        })
-    } else {
-        // Has captures - create function with capture parameters, then partial application
-        let mut captured: Vec<String> = free.into_iter().collect();
-        captured.sort();
-
-        // Build the new function with captures as initial parameters
-        let lifted_lambda = build_lifted_function_lambda(&captured, lambda, ctx);
-
-        let new_function = CoreFunction {
-            name: CoreIdent {
-                value: lambda_name.clone(),
-                position: lambda.position.clone(),
-                info: (),
-            },
-            lambda: lifted_lambda,
-        };
-
-        ctx.lifted_functions.push(new_function);
-
-        // Replace with call to the function, partially applied with captured values
-        let mut result = CoreExpr::Ident(CoreIdent {
-            value: lambda_name,
-            position: lambda.position.clone(),
-            info: (),
-        });
-
-        for cap_var in &captured {
-            result = CoreExpr::FunctionCall(CoreFunctionCall {
-                func: Box::new(result),
-                arg: Box::new(CoreExpr::Ident(CoreIdent {
-                    value: cap_var.clone(),
-                    position: lambda.position.clone(),
-                    info: (),
-                })),
-                position: lambda.position.clone(),
-                info: (),
-            });
-        }
-
-        result
+        // No captures - just recursively lift inner expressions
+        return lift_lambda_inner(lambda, globals);
     }
+
+    // Sort captured vars for deterministic output
+    let mut captured: Vec<String> = free.into_iter().collect();
+    captured.sort();
+
+    // Build nested lambdas: \cap1 => \cap2 => \original_param => body
+    build_lifted_lambda(captured, lambda, globals)
 }
 
-/// Lift the body of a lambda (recursively lift any nested lambdas)
-fn lift_lambda_body(lambda: &CoreLambda<()>, ctx: &mut LiftContext) -> CoreLambda<()> {
+/// Lift inner expressions of a lambda without adding capture parameters
+fn lift_lambda_inner(lambda: CoreLambda<()>, globals: &HashSet<String>) -> CoreLambda<()> {
     CoreLambda {
-        param: lambda.param.clone(),
-        body: lift_lambda_body_content(&lambda.body, ctx),
-        position: lambda.position.clone(),
-        info: (),
+        param: lambda.param,
+        body: lift_body(lambda.body, globals),
+        position: lambda.position,
+        info: lambda.info,
     }
 }
 
-/// Lift the content of a lambda body
-fn lift_lambda_body_content(
-    body: &CoreLambdaBody<()>,
-    ctx: &mut LiftContext,
-) -> CoreLambdaBody<()> {
-    match body {
-        CoreLambdaBody::Expression(expr) => {
-            CoreLambdaBody::Expression(Box::new(lift_expr(expr, ctx)))
-        }
-        CoreLambdaBody::Block(stmts) => {
-            CoreLambdaBody::Block(stmts.iter().map(|s| lift_statement(s, ctx)).collect())
-        }
-    }
-}
-
-/// Build a lambda for a lifted function with capture parameters prepended
-fn build_lifted_function_lambda(
-    captured: &[String],
-    original: &CoreLambda<()>,
-    ctx: &mut LiftContext,
+/// Build a lambda with captured variables as explicit parameters
+fn build_lifted_lambda(
+    captured: Vec<String>,
+    original: CoreLambda<()>,
+    globals: &HashSet<String>,
 ) -> CoreLambda<()> {
     if captured.is_empty() {
-        return lift_lambda_body(original, ctx);
+        return lift_lambda_inner(original, globals);
     }
 
     let position = original.position.clone();
 
     // Build innermost: original lambda with lifted body
-    let mut inner = lift_lambda_body(original, ctx);
+    let mut inner = CoreLambda {
+        param: original.param,
+        body: lift_body(original.body, globals),
+        position: position.clone(),
+        info: (),
+    };
 
     // Wrap with captured params (in reverse order to get correct nesting)
-    for cap_var in captured.iter().rev() {
+    for cap_var in captured.into_iter().rev() {
         inner = CoreLambda {
             param: CoreLambdaParam::Ident(CoreIdent {
-                value: cap_var.clone(),
+                value: cap_var,
                 position: position.clone(),
                 info: (),
             }),
@@ -416,6 +287,105 @@ fn build_lifted_function_lambda(
     }
 
     inner
+}
+
+/// Lift all lambdas in a lambda body
+fn lift_body(body: CoreLambdaBody<()>, globals: &HashSet<String>) -> CoreLambdaBody<()> {
+    match body {
+        CoreLambdaBody::Expression(expr) => {
+            CoreLambdaBody::Expression(Box::new(lift_expr(*expr, globals)))
+        }
+        CoreLambdaBody::Block(stmts) => CoreLambdaBody::Block(
+            stmts
+                .into_iter()
+                .map(|s| lift_statement(s, globals))
+                .collect(),
+        ),
+    }
+}
+
+/// Lift all lambdas in a statement
+fn lift_statement(stmt: CoreStatement<()>, globals: &HashSet<String>) -> CoreStatement<()> {
+    match stmt {
+        CoreStatement::Assignment(assign) => CoreStatement::Assignment(CoreAssignment {
+            name: assign.name,
+            value: Box::new(lift_expr(*assign.value, globals)),
+            position: assign.position,
+            info: (),
+        }),
+        CoreStatement::Expression(expr) => CoreStatement::Expression(lift_expr(expr, globals)),
+    }
+}
+
+/// Recursively lift all lambdas in an expression
+fn lift_expr(expr: CoreExpr<()>, globals: &HashSet<String>) -> CoreExpr<()> {
+    match expr {
+        CoreExpr::Lambda(lambda) => {
+            // Lift the lambda
+            let free = free_vars_lambda(&lambda, globals);
+
+            if free.is_empty() {
+                // No captures - just recursively lift inner expressions
+                CoreExpr::Lambda(lift_lambda_inner(lambda, globals))
+            } else {
+                // Has captures - lift AND auto-apply the captured values
+                // Transform: \x => body  (captures a, b)
+                // Into: (\a => \b => \x => body)(a)(b)
+
+                let mut captured: Vec<String> = free.into_iter().collect();
+                captured.sort();
+
+                let lifted_lambda = build_lifted_lambda(captured.clone(), lambda, globals);
+
+                // Build nested function calls to apply captured values
+                let mut result = CoreExpr::Lambda(lifted_lambda);
+                for cap_var in &captured {
+                    result = CoreExpr::FunctionCall(CoreFunctionCall {
+                        func: Box::new(result),
+                        arg: Box::new(CoreExpr::Ident(CoreIdent {
+                            value: cap_var.clone(),
+                            position: lachs::Span::default(),
+                            info: (),
+                        })),
+                        position: lachs::Span::default(),
+                        info: (),
+                    });
+                }
+                result
+            }
+        }
+        CoreExpr::FunctionCall(call) => CoreExpr::FunctionCall(CoreFunctionCall {
+            func: Box::new(lift_expr(*call.func, globals)),
+            arg: Box::new(lift_expr(*call.arg, globals)),
+            position: call.position,
+            info: (),
+        }),
+        CoreExpr::BinaryOp(binop) => CoreExpr::BinaryOp(CoreBinaryOp {
+            op: binop.op,
+            left: Box::new(lift_expr(*binop.left, globals)),
+            right: Box::new(lift_expr(*binop.right, globals)),
+            position: binop.position,
+            info: (),
+        }),
+        CoreExpr::UnaryOp(unop) => CoreExpr::UnaryOp(CoreUnaryOp {
+            op: unop.op,
+            operand: Box::new(lift_expr(*unop.operand, globals)),
+            position: unop.position,
+            info: (),
+        }),
+        CoreExpr::IfThenElse(if_expr) => CoreExpr::IfThenElse(CoreIfThenElse {
+            condition: Box::new(lift_expr(*if_expr.condition, globals)),
+            then_expr: Box::new(lift_expr(*if_expr.then_expr, globals)),
+            else_expr: Box::new(lift_expr(*if_expr.else_expr, globals)),
+            position: if_expr.position,
+            info: (),
+        }),
+        // Literals and identifiers remain unchanged
+        CoreExpr::Unit(_) | CoreExpr::Integer(_) | CoreExpr::String(_) | CoreExpr::Boolean(_) => {
+            expr
+        }
+        CoreExpr::Ident(_) => expr,
+    }
 }
 
 #[cfg(test)]
@@ -524,69 +494,52 @@ mod tests {
     }
 
     #[test]
-    fn test_lambda_extraction_no_capture() {
-        reset_lambda_counter();
-
-        // Simple lambda with no captures
+    fn test_lift_lambda_no_capture() {
+        // \x => x should remain unchanged
         let lambda = CoreLambda {
             param: CoreLambdaParam::Ident(make_ident("x")),
             body: CoreLambdaBody::Expression(Box::new(make_ident_expr("x"))),
             position: Span::default(),
             info: (),
         };
+        let globals = HashSet::new();
+        let lifted = lift_lambda_with_globals(lambda.clone(), &globals);
 
-        let mut ctx = LiftContext::new(HashSet::new());
-        let result = extract_lambda(&lambda, &mut ctx);
-
-        // Should create lambda_0 and return reference to it
-        assert_eq!(ctx.lifted_functions.len(), 1);
-        assert_eq!(ctx.lifted_functions[0].name.value, "lambda_0");
-
-        // Result should be identifier
-        match result {
-            CoreExpr::Ident(id) => assert_eq!(id.value, "lambda_0"),
-            _ => panic!("Expected Ident"),
+        // Should be structurally the same
+        match lifted.param {
+            CoreLambdaParam::Ident(id) => assert_eq!(id.value, "x"),
+            _ => panic!("Expected ident param"),
         }
     }
 
     #[test]
-    fn test_lambda_extraction_with_capture() {
-        reset_lambda_counter();
-
-        // Lambda with one capture: \y => x + y
+    fn test_lift_lambda_one_capture() {
+        // \y => x should become \x => \y => x
         let lambda = CoreLambda {
             param: CoreLambdaParam::Ident(make_ident("y")),
-            body: CoreLambdaBody::Expression(Box::new(CoreExpr::BinaryOp(CoreBinaryOp {
-                op: crate::ast::expression::BinOpKind::Add,
-                left: Box::new(make_ident_expr("x")),
-                right: Box::new(make_ident_expr("y")),
-                position: Span::default(),
-                info: (),
-            }))),
+            body: CoreLambdaBody::Expression(Box::new(make_ident_expr("x"))),
             position: Span::default(),
             info: (),
         };
+        let globals = HashSet::new();
+        let lifted = lift_lambda_with_globals(lambda, &globals);
 
-        let mut ctx = LiftContext::new(HashSet::new());
-        let result = extract_lambda(&lambda, &mut ctx);
+        // Outer lambda should capture x
+        match lifted.param {
+            CoreLambdaParam::Ident(id) => assert_eq!(id.value, "x"),
+            _ => panic!("Expected ident param for capture"),
+        }
 
-        // Should create lambda_0 with signature: lambda_0 x y = x + y
-        assert_eq!(ctx.lifted_functions.len(), 1);
-        assert_eq!(ctx.lifted_functions[0].name.value, "lambda_0");
-
-        // Result should be lambda_0(x)
-        match result {
-            CoreExpr::FunctionCall(call) => {
-                match *call.func {
-                    CoreExpr::Ident(id) => assert_eq!(id.value, "lambda_0"),
-                    _ => panic!("Expected Ident in func"),
-                }
-                match *call.arg {
-                    CoreExpr::Ident(id) => assert_eq!(id.value, "x"),
-                    _ => panic!("Expected Ident in arg"),
-                }
-            }
-            _ => panic!("Expected FunctionCall"),
+        // Inner should be the original
+        match lifted.body {
+            CoreLambdaBody::Expression(expr) => match *expr {
+                CoreExpr::Lambda(inner) => match inner.param {
+                    CoreLambdaParam::Ident(id) => assert_eq!(id.value, "y"),
+                    _ => panic!("Expected ident param"),
+                },
+                _ => panic!("Expected lambda in body"),
+            },
+            _ => panic!("Expected expression body"),
         }
     }
 }
