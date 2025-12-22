@@ -23,6 +23,7 @@ where
 
         // Add builtins
         global_frame.insert("print".to_string(), RValue::Builtin(Builtin::Print));
+        global_frame.insert("toString".to_string(), RValue::Builtin(Builtin::ToString));
 
         for func in &functions {
             global_frame.insert(

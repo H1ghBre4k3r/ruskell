@@ -44,6 +44,7 @@ where
                     RValue::CoreLambda(lambda, captured) => lambda.run(arg_value, scope, &captured),
                     RValue::Builtin(builtin) => {
                         use super::value::Builtin;
+                        use crate::ast::expression::StringLiteral;
                         match builtin {
                             Builtin::Print => {
                                 // Print the value to stdout
@@ -57,6 +58,23 @@ where
                                     RValue::Builtin(_) => println!("<builtin>"),
                                 }
                                 RValue::Unit
+                            }
+                            Builtin::ToString => {
+                                // Convert value to string
+                                let string_value = match &arg_value {
+                                    RValue::Unit => "()".to_string(),
+                                    RValue::Integer(i) => i.value.to_string(),
+                                    RValue::String(s) => s.value.clone(),
+                                    RValue::Bool(b) => b.to_string(),
+                                    RValue::CoreLambda(_, _) => "<function>".to_string(),
+                                    RValue::Lambda(_) => "<function>".to_string(),
+                                    RValue::Builtin(_) => "<builtin>".to_string(),
+                                };
+                                RValue::String(StringLiteral {
+                                    value: string_value,
+                                    position: call.position.clone(),
+                                    info: call.info.clone(),
+                                })
                             }
                         }
                     }
@@ -156,6 +174,29 @@ where
                             }
                             _ => panic!("|| requires boolean operands"),
                         }
+                    }
+
+                    // String concatenation
+                    BinOpKind::Concat => {
+                        use crate::ast::expression::StringLiteral;
+                        let left = binop.left.eval(scope);
+                        let right = binop.right.eval(scope);
+
+                        let left_str = match left {
+                            RValue::String(s) => s.value,
+                            _ => panic!("++ left operand must be string"),
+                        };
+
+                        let right_str = match right {
+                            RValue::String(s) => s.value,
+                            _ => panic!("++ right operand must be string"),
+                        };
+
+                        RValue::String(StringLiteral {
+                            value: left_str + &right_str,
+                            position: binop.position.clone(),
+                            info: binop.info.clone(),
+                        })
                     }
                 }
             }

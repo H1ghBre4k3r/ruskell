@@ -317,6 +317,27 @@ impl Infer {
 
                 Ok((final_subst, Type::Bool))
             }
+
+            // String concatenation: String -> String -> String
+            BinOpKind::Concat => {
+                let (s1, left_ty) = self.infer_expr(env, &binop.left)?;
+                let env1 = env.apply_subst(&s1);
+                let (s2, right_ty) = self.infer_expr(&env1, &binop.right)?;
+
+                // Unify left with String
+                let left_ty_subst = s2.apply(&left_ty);
+                let s3 = unify(&left_ty_subst, &Type::String)
+                    .map_err(|e| TypeError::from_unify_error(e, binop.position.clone()))?;
+
+                // Unify right with String
+                let right_ty_subst = s3.apply(&right_ty);
+                let s4 = unify(&right_ty_subst, &Type::String)
+                    .map_err(|e| TypeError::from_unify_error(e, binop.position.clone()))?;
+
+                let final_subst = s4.compose(&s3).compose(&s2).compose(&s1);
+
+                Ok((final_subst, Type::String))
+            }
         }
     }
 
@@ -453,6 +474,14 @@ impl Infer {
         env = env.extend(
             "print".to_string(),
             TypeScheme::polymorphic(vec![type_var], print_type),
+        );
+
+        // Add toString: forall a. a -> String
+        let type_var = self.fresh_var();
+        let to_string_type = Type::func(Type::Var(type_var.clone()), Type::String);
+        env = env.extend(
+            "toString".to_string(),
+            TypeScheme::polymorphic(vec![type_var], to_string_type),
         );
 
         let mut errors = Vec::new();

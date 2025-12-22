@@ -12,6 +12,7 @@ pub struct CapturedEnv<T>(pub HashMap<String, RValue<T>>);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Builtin {
     Print,
+    ToString,
 }
 
 /// Runtime value representation

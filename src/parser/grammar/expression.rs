@@ -615,7 +615,7 @@ fn multiplicative_expr() -> BoxedParser<Expression<()>> {
     })
 }
 
-/// additive := multiplicative (("+" | "-") multiplicative)*
+/// additive := multiplicative (("+" | "-" | "++") multiplicative)*
 fn additive_expr() -> BoxedParser<Expression<()>> {
     BoxedParser::new(move |state: &mut ParseState| {
         let mut left = multiplicative_expr().parse(state)?;
@@ -625,6 +625,10 @@ fn additive_expr() -> BoxedParser<Expression<()>> {
             let token = state.peek();
 
             let op = match token {
+                Some(Token::PlusPlus(_)) => {
+                    state.advance();
+                    BinOpKind::Concat
+                }
                 Some(Token::Plus(_)) => {
                     state.advance();
                     BinOpKind::Add

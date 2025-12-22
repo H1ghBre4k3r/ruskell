@@ -3,7 +3,7 @@ mod scope;
 mod value;
 
 pub use scope::Scope;
-pub use value::{Builtin, CapturedEnv, RValue};
+pub use value::{CapturedEnv, RValue};
 
 use std::collections::HashMap;
 use std::process;
