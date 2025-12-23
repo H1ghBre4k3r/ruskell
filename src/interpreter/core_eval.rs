@@ -18,29 +18,29 @@
 //! The interpreter uses **call-by-value** (eager) evaluation:
 //!
 //! ```text
-/// Evaluate function call:
-///   1. Evaluate function expression (get closure)
-///   2. Evaluate argument expression
-///   3. Apply closure to argument
-///
-/// // Example:
-/// add(2 * 3, 4 + 5)
-/// // Step 1: Evaluate "add" -> closure for add
-/// // Step 2: Evaluate "2 * 3" -> 6
-/// // Step 3: Evaluate "4 + 5" -> 9
-/// // Step 4: Apply add closure to (6, 9) -> 15
-/// ```
+//! Evaluate function call:
+//!   1. Evaluate function expression (get closure)
+//!   2. Evaluate argument expression
+//!   3. Apply closure to argument
+//!
+//! // Example:
+//! add(2 * 3, 4 + 5)
+//! // Step 1: Evaluate "add" -> closure for add
+//! // Step 2: Evaluate "2 * 3" -> 6
+//! // Step 3: Evaluate "4 + 5" -> 9
+//! // Step 4: Apply add closure to (6, 9) -> 15
+//! ```
 //!
 //! ## Closures and Lexical Scoping
 //!
 //! When a lambda is evaluated, it captures the current environment
 //! in a closure, enabling proper lexical scoping:
 //!
-/// ```text
-/// makeAdder = \x => \y => x + y
-/// add5 = makeAdder(5)
-/// add5(3)  // Returns 8 (x is 5 from closure)
-/// ```
+//! ```text
+//! makeAdder = \x => \y => x + y
+//! add5 = makeAdder(5)
+//! add5(3)  // Returns 8 (x is 5 from closure)
+//! ```
 //!
 //! The closure captures `x=5` when `makeAdder(5)` is evaluated,
 //! and that captured environment is used when `add5(3)` runs.
@@ -52,14 +52,14 @@
 //! - **`print`**: Prints value to stdout, returns unit
 //!   - Prints integers, strings, booleans, and unit directly
 //!   - Prints functions/lambdas as `"<function>"`
-///   - Returns `()`
-///
-/// - **`toString`**: Converts any value to string
-///   - Integers: `"42"` → `"42"`
-///   - Strings: `"hello"` → `"hello"` (no quotes)
-///   - Booleans: `true` → `"true"`
-///   - Unit: `()` → `"()"`
-///   - Functions: `"<function>"`
+//!   - Returns `()`
+//!
+//! - **`toString`**: Converts any value to string
+//!   - Integers: `"42"` → `"42"`
+//!   - Strings: `"hello"` → `"hello"` (no quotes)
+//!   - Booleans: `true` → `"true"`
+//!   - Unit: `()` → `"()"`
+//!   - Functions: `"<function>"`
 //!
 //! ## Type Safety
 //!
@@ -70,21 +70,21 @@
 //!
 //! ## Short-Circuit Evaluation
 //!
-/// Logical operators (`&&`, `||`) implement short-circuit evaluation:
+//! Logical operators (`&&`, `||`) implement short-circuit evaluation:
 //!
-/// ```text
-/// false && panic()  // Doesn't evaluate panic(), returns false
-/// true || panic()    // Doesn't evaluate panic(), returns true
-/// ```
+//! ```text
+//! false && panic()  // Doesn't evaluate panic(), returns false
+//! true || panic()    // Doesn't evaluate panic(), returns true
+//! ```
 //!
 //! This is required for idiomatic Ruskell code (e.g., checking
-/// if a value exists before using it).
+//! if a value exists before using it).
 //!
 //! ## Pipeline Position
 //!
-/// ```text
-/// Parser → Surface AST → Desugaring → Core AST → [INTERPRETER] → Program Result
-/// ```
+//! ```text
+//! Parser → Surface AST → Desugaring → Core AST → [INTERPRETER] → Program Result
+//! ```
 //!
 //! ## Related Modules
 //!
@@ -119,31 +119,31 @@ where
     /// # Evaluation Rules
     ///
     /// ```text
-    /// // Literals evaluate to themselves:
-    /// eval(Unit) = Unit
-    /// eval(Integer(42)) = Integer(42)
-    /// eval(String("hello")) = String("hello")
-    /// eval(Boolean(true)) = Boolean(true)
-    ///
-    /// // Variables look up in scope:
-    /// eval(Ident("x")) = scope["x"]
-    ///
-    /// // Lambdas capture environment:
-    /// eval(\x => expr) = Closure(scope, \x => expr)
-    ///
-    /// // Function calls evaluate function and arg, then apply:
-    /// eval(f(arg)) = eval(f).apply(eval(arg))
-    ///
-    /// // Binary ops evaluate operands, then apply operation:
-    /// eval(x + y) = eval(x) + eval(y)
-    ///
-    /// // Unary ops evaluate operand, then apply operation:
-    /// eval(!x) = !eval(x)
-    ///
-    /// // If-then-else evaluates condition, then appropriate branch:
-    /// eval(if c then t else e) = eval(t)  if eval(c) is true
-    ///                            = eval(e)  if eval(c) is false
-    /// ```
+//! // Literals evaluate to themselves:
+//! eval(Unit) = Unit
+//! eval(Integer(42)) = Integer(42)
+//! eval(String("hello")) = String("hello")
+//! eval(Boolean(true)) = Boolean(true)
+//!
+//! // Variables look up in scope:
+//! eval(Ident("x")) = scope["x"]
+//!
+//! // Lambdas capture environment:
+//! eval(\x => expr) = Closure(scope, \x => expr)
+//!
+//! // Function calls evaluate function and arg, then apply:
+//! eval(f(arg)) = eval(f).apply(eval(arg))
+//!
+//! // Binary ops evaluate operands, then apply operation:
+//! eval(x + y) = eval(x) + eval(y)
+//!
+//! // Unary ops evaluate operand, then apply operation:
+//! eval(!x) = !eval(x)
+//!
+//! // If-then-else evaluates condition, then appropriate branch:
+//! eval(if c then t else e) = eval(t)  if eval(c) is true
+//!                            = eval(e)  if eval(c) is false
+//! ```
     ///
     /// # Panic Conditions
     ///
@@ -371,7 +371,7 @@ where
     /// Evaluate a Core statement to a runtime value.
     ///
     /// Statements are executed for their side effects, but
-    /// they also return a value (the value of the last expression
+    /// they also return a value (the value of last expression
     /// in the statement, or the assigned value for assignments).
     ///
     /// # Arguments
@@ -385,17 +385,17 @@ where
     /// # Statement Semantics
     ///
     /// ```text
-    /// // Assignment:
-    /// eval(x := expr):
-    ///   1. Evaluate expr to get value
-    ///   2. Bind x to value in current scope (shadows if exists)
-    ///   3. Return the bound value
-    ///
-    /// // Expression statement:
-    /// eval(expr):
-    ///   Evaluate expr and return its value
-    ///   (Used for side effects like print(42))
-    /// ```
+//! // Assignment:
+//! eval(x := expr):
+//!   1. Evaluate expr to get value
+//!   2. Bind x to value in current scope (shadows if exists)
+//!   3. Return the bound value
+//!
+//! // Expression statement:
+//! eval(expr):
+//!   Evaluate expr and return its value
+//!   (Used for side effects like print(42))
+//! ```
     pub fn eval(&self, scope: &mut Scope<T>) -> RValue<T> {
         match self {
             CoreStatement::Assignment(assignment) => {
@@ -430,39 +430,39 @@ where
     /// # Execution Model
     ///
     /// ```text
-    /// run(arg, scope, captured):
-    ///   1. Enter new scope with captured environment as parent
-    ///   2. Enter new scope for lambda's parameters
-    ///   3. Bind parameter to arg
-    ///   4. Evaluate body in this combined scope
-    ///   5. Leave parameter scope
-    ///   6. Leave captured scope
-    ///   7. Return result
-    /// ```
+//! run(arg, scope, captured):
+//!   1. Enter new scope with captured environment as parent
+//!   2. Enter new scope for the lambda's parameters
+//!   3. Bind the parameter
+//!   4. Evaluate body in this combined scope
+//!   5. Leave the parameter scope
+//!   6. Leave the captured scope
+//!   7. Return result
+//! ```
     ///
     /// # Scope Hierarchy
     ///
     /// During lambda execution, scopes are arranged as:
     ///
     /// ```text
-    /// [Parameter Scope]  <- Innermost (x, y, etc.)
-    ///   [Captured Scope]  <- Environment where lambda was defined
-    ///     [Global Scope]   <- Builtins and top-level bindings
-    /// ```
+//! [Parameter Scope]  <- Innermost (x, y, etc.)
+//!   [Captured Scope]  <- Environment where lambda was defined
+//!     [Global Scope]   <- Builtins and top-level bindings
+//! ```
     ///
     /// # Example
     ///
     /// ```text
-    /// // Closure captured x=5:
-    /// // makeAdder = \x => \y => x + y
-    /// // add5 = makeAdder(5)
-    ///
-    /// // When running add5(3):
-    /// // 1. Enter captured scope (where x=5)
-    /// // 2. Enter parameter scope (where y=3)
-    /// // 3. Evaluate: x + y = 5 + 3 = 8
-    /// // 4. Return 8
-    /// ```
+//! // Closure captured x=5:
+//! // makeAdder = \x => \y => x + y
+//! // add5 = makeAdder(5)
+//!
+//! // When running add5(3):
+//! // 1. Enter captured scope (where x=5)
+//! // 2. Enter parameter scope (where y=3)
+//! // 3. Evaluate: x + y = 5 + 3 = 8
+//! // 4. Return 8
+//! ```
     pub fn run(
         &self,
         arg: RValue<T>,

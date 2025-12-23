@@ -5,7 +5,7 @@
 //!
 //! ## Overview
 //!
-//! A substitution maps type variables to types, representing the
+//! A substitution maps type variables to types, representing
 //! assignments discovered during type inference. For example:
 //!
 //! - After inferring `\x => x + 1`, we might have substitution: `'a := Int`
@@ -25,61 +25,61 @@
 //! variable that appears in the substitution with its mapped type:
 //!
 //! ```text
-/// // Substitution: {'a := Int}
-///
-/// Apply to 'a:
-///   'a → Int
-///
-/// Apply to 'a -> 'a:
-///   'a -> 'a → Int -> Int
-///
-/// Apply to 'a -> 'b:
-///   'a -> 'b → Int -> 'b
-/// ```
+//! // Substitution: {'a := Int}
+//!
+//! Apply to 'a:
+//!   'a → Int
+//!
+//! Apply to 'a -> 'a:
+//!   'a -> 'a → Int -> Int
+//!
+//! Apply to 'a -> 'b:
+//!   'a -> 'b → Int -> 'b
+//! ```
 //!
 //! ## Substitution Composition
 //!
-/// When composing substitutions S1 and S2 (S2 ∘ S1):
+//! When composing substitutions S1 and S2 (S2 ∘ S1):
 //!
 //! ```text
-/// (S2 ∘ S1)(t) = S2(S1(t))
-///
-/// // Meaning: first apply S1, then apply S2 to the result
-///
-/// // Example:
-/// S1 = {'a := 'b}
-/// S2 = {'b := Int}
-///
-/// Compose S2 ∘ S1:
-///   For 'a in S1: apply S2 to 'b → Int
-///   Result: {'a := Int, 'b := Int}
-/// ```
+//! (S2 ∘ S1)(t) = S2(S1(t))
+//!
+//! // Meaning: first apply S1, then apply S2 to the result
+//!
+//! // Example:
+//! S1 = {'a := 'b}
+//! S2 = {'b := Int}
+//!
+//! Compose S2 ∘ S1:
+//!   For 'a in S1: apply S2 to 'b → Int
+//!   Result: {'a := Int, 'b := Int}
+//! ```
 //!
 //! Composition is used in type inference to combine substitutions
 //! from different parts of the expression. For example:
 //!
-/// ```text
-/// // Inferring: (x + 1) (x + 2)
-///
-/// 1. Infer x + 1: Get S1 = {'a := Int} (x is Int)
-/// 2. Infer x + 2: Get S2 = {'b := Int} (x is Int)
-/// 3. Check types unify: Int = Int → OK
-/// 4. Compose: S2 ∘ S1 = {'a := Int, 'b := Int}
-/// ```
+//! ```text
+//! // Inferring: (x + 1) (x + 2)
+//!
+//! 1. Infer x + 1: Get S1 = {'a := Int} (x is Int)
+//! 2. Infer x + 2: Get S2 = {'b := Int} (x is Int)
+//! 3. Check types unify: Int = Int → OK
+//! 4. Compose: S2 ∘ S1 = {'a := Int, 'b := Int}
+//! ```
 //!
 //! ## Composition Order
 //!
-/// Composition is **not** commutative: S1 ∘ S2 ≠ S2 ∘ S1.
+//! Composition is **not** commutative: S1 ∘ S2 ≠ S2 ∘ S1.
 //!
-/// The standard convention in Hindley-Milner is:
+//! The standard convention in Hindley-Milner is:
 //!
-/// ```text
-/// result = S2.compose(&S1)  // Means: apply S1 first, then S2
-/// // Or: result = S2 ∘ S1
-/// ```
+//! ```text
+//! result = S2.compose(&S1)  // Means: apply S1 first, then S2
+//! // Or: result = S2 ∘ S1
+//! ```
 //!
 //! This order matters because later substitutions may affect
-/// types substituted by earlier ones.
+//! types substituted by earlier ones.
 //!
 //! ## Related Modules
 //!
@@ -162,54 +162,54 @@ impl Substitution {
     }
 
     /// Apply this substitution to a type.
-///
-/// Recursively replaces all type variables in the type
-/// with their mapped values from this substitution.
-///
-/// # Arguments
-///
-/// * `ty` - The type to apply substitution to
-///
-/// # Returns
-///
-/// A new type with all substitutions applied
-///
-/// # Algorithm
-///
-/// ```text
-/// apply(t):
-///   match t:
-///     Int, String, Unit, Bool:
-///       return t  // Concrete types unchanged
-///
-///     Var(v):
-///       if v in subst:
-///         return subst[v]  // Replace with mapped type
-///       else:
-///         return Var(v)  // Not in substitution, keep
-///
-///     Func(t1, t2):
-///       return Func(apply(t1), apply(t2))  // Recurse
-/// ```
-///
-/// # Examples
-///
-/// ```text
-/// // Substitution: {'a := Int, 'b := String}
-///
-/// // Apply to type variable:
-/// apply('a) = Int
-/// apply('b) = String
-/// apply('c) = 'c  // Not in substitution
-///
-/// // Apply to function type:
-/// apply('a -> 'b) = Int -> String
-/// apply('a -> 'a) = Int -> Int
-/// apply('a -> 'c) = Int -> 'c
-///
-/// // Apply to nested function:
-/// apply(('a -> 'b) -> 'a) = (Int -> String) -> Int
-/// ```
+    ///
+    /// Recursively replaces all type variables in the type
+    /// with their mapped values from this substitution.
+    ///
+    /// # Arguments
+    ///
+    /// * `ty` - The type to apply substitution to
+    ///
+    /// # Returns
+    ///
+    /// A new type with all substitutions applied
+    ///
+    /// # Algorithm
+    ///
+    /// ```text
+    /// apply(t):
+    ///   match t:
+    ///     Int, String, Unit, Bool:
+    ///       return t  // Concrete types unchanged
+    ///
+    ///     Var(v):
+    ///       if v in subst:
+    ///         return subst[v]  // Replace with mapped type
+    ///       else:
+    ///         return Var(v)  // Not in substitution, keep
+    ///
+    ///     Func(t1, t2):
+    ///       return Func(apply(t1), apply(t2))  // Recurse
+    /// ```
+    ///
+    /// # Examples
+    ///
+    /// ```text
+    /// // Substitution: {'a := Int, 'b := String}
+    ///
+    /// // Apply to type variable:
+    /// apply('a) = Int
+    /// apply('b) = String
+    /// apply('c) = 'c  // Not in substitution
+    ///
+    /// // Apply to function type:
+    /// apply('a -> 'b) = Int -> String
+    /// apply('a -> 'a) = Int -> Int
+    /// apply('a -> 'c) = Int -> 'c
+    ///
+    /// // Apply to nested function:
+    /// apply(('a -> 'b) -> 'a) = (Int -> String) -> Int
+    /// ```
     pub fn apply(&self, ty: &Type) -> Type {
         match ty {
             Type::Int | Type::String | Type::Unit | Type::Bool => ty.clone(),
@@ -219,61 +219,61 @@ impl Substitution {
     }
 
     /// Compose this substitution with another (this ∘ other).
-///
-/// Returns a new substitution that represents applying `other`
-/// first, then applying `this` to the result.
-///
-/// Note: This is `self.compose(&other)` = `self ∘ other`,
-/// which means "apply other first, then apply self".
-///
-/// # Arguments
-///
-/// * `other` - The substitution to apply first
-///
-/// # Returns
-///
-/// A new substitution representing `self ∘ other`
-///
-/// # Algorithm
-///
-/// ```text
-/// compose(S1, S2) = S1 ∘ S2
-///
-/// 1. For each (var, ty) in S1:
-///      result[var] = S2.apply(ty)  // Apply S2 to the mapped type
-///
-/// 2. For each (var, ty) in S2:
-///      if var not in result:
-///        result[var] = ty  // Keep mappings not overridden
-///
-/// 3. Return result
-/// ```
-///
-/// # Example
-///
-/// ```text
-/// S1 = {'a := 'b}
-/// S2 = {'b := Int}
-///
-/// Compose S1 ∘ S2:
-///   1. For 'a := 'b in S1: apply S2 to 'b → Int
-///      result = {'a := Int}
-///   2. For 'b := Int in S2: 'b not in result → add it
-///      result = {'a := Int, 'b := Int}
-///   3. Return result
-///
-/// // Check: (S1 ∘ S2)('a) = S1(S2('a)) = S1('a) = 'b = Int ✓
-/// ```
-///
-/// # Order Matters
-///
-/// ```text
-/// S1 = {'a := Int}
-/// S2 = {'a := String}
-///
-/// S1 ∘ S2 = {'a := Int}      // S2's mapping is overridden
-/// S2 ∘ S1 = {'a := String}   // S1's mapping is overridden
-/// ```
+    ///
+    /// Returns a new substitution that represents applying `other`
+    /// first, then applying `this` to the result.
+    ///
+    /// Note: This is `self.compose(&other)` = `self ∘ other`,
+    /// which means "apply other first, then apply self".
+    ///
+    /// # Arguments
+    ///
+    /// * `other` - The substitution to apply first
+    ///
+    /// # Returns
+    ///
+    /// A new substitution representing `self ∘ other`
+    ///
+    /// # Algorithm
+    ///
+    /// ```text
+    /// compose(S1, S2) = S1 ∘ S2
+    ///
+    /// 1. For each (var, ty) in S1:
+    ///      result[var] = S2.apply(ty)  // Apply S2 to the mapped type
+    ///
+    /// 2. For each (var, ty) in S2:
+    ///      if var not in result:
+    ///        result[var] = ty  // Keep mappings not overridden
+    ///
+    /// 3. Return result
+    /// ```
+    ///
+    /// # Example
+    ///
+    /// ```text
+    /// S1 = {'a := 'b}
+    /// S2 = {'b := Int}
+    ///
+    /// Compose S1 ∘ S2:
+    ///   1. For 'a := 'b in S1: apply S2 to 'b → Int
+    ///      result = {'a := Int}
+    ///   2. For 'b := Int in S2: 'b not in result → add it
+    ///      result = {'a := Int, 'b := Int}
+    ///   3. Return result
+    ///
+    /// // Check: (S1 ∘ S2)('a) = S1(S2('a)) = S1('a) = 'b = Int ✓
+    /// ```
+    ///
+    /// # Order Matters
+    ///
+    /// ```text
+    /// S1 = {'a := Int}
+    /// S2 = {'a := String}
+    ///
+    /// S1 ∘ S2 = {'a := Int}      // S2's mapping is overridden
+    /// S2 ∘ S1 = {'a := String}   // S1's mapping is overridden
+    /// ```
     pub fn compose(&self, other: &Substitution) -> Substitution {
         let mut result = HashMap::new();
 

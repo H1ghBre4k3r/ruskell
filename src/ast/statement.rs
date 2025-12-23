@@ -1,6 +1,6 @@
 //! # Statement AST Nodes
 //!
-//! This module defines all statement types in the Surface AST.
+//! This module defines all statement types in Surface AST.
 //! Statements are used in do-blocks and lambda bodies where
 //! sequential execution is needed.
 //!
@@ -21,12 +21,12 @@
 //! In do-blocks, statements are executed sequentially:
 //!
 //! ```text
-/// do
-///     x := 1          // Assignment statement
-///     y := x + 2      // Assignment statement
-///     print(y)         // Expression statement (evaluated for effect)
-/// end
-/// ```
+//! do
+//!     x := 1          // Assignment statement
+//!     y := x + 2      // Assignment statement
+//!     print(y)         // Expression statement (evaluated for effect)
+//! end
+//! ```
 //!
 //! ## Semantics
 //!
@@ -35,11 +35,11 @@
 //! Assignments introduce (or shadow) variables in the current scope:
 //!
 //! ```text
-/// x := 42      // Introduce x = 42
-/// x := 100     // Shadow x with x = 100
-/// // Inner scope sees x = 100
-/// // Outer scope still sees x = 42
-/// ```
+//! x := 42      // Introduce x = 42
+//! x := 100     // Shadow x with x = 100
+//! // Inner scope sees x = 100
+//! // Outer scope still sees x = 42
+//! ```
 //!
 //! ### Expression Statements
 //!
@@ -47,14 +47,14 @@
 //! Typically used for side effects (e.g., function calls that print):
 //!
 //! ```text
-/// print(42)     // Call print, ignore unit return value
-/// ```
+//! print(42)     // Call print, ignore unit return value
+//! ```
 //!
 //! ## Pipeline Position
 //!
 //! ```text
-/// Lexer → Token Stream → Parser → [STATEMENT AST] → Desugaring → Core AST
-/// ```
+//! Lexer → Token Stream → Parser → [STATEMENT AST] → Desugaring → Core AST
+//! ```
 //!
 //! ## Related Modules
 //!
@@ -114,31 +114,31 @@ pub enum Statement<T> {
 /// * `info` - Metadata (currently unused)
 ///
 /// # Semantics
-///
+//!
 /// When an assignment is executed:
 //!
 //! 1. Evaluate the `value` expression
-//! 2. Bind the resulting value to `name` in current scope
-//! 3. If `name` already exists in scope, it's shadowed (not modified)
+//! 2. Bind the resulting value to `name` in the current scope
+//! 3. If `name` already exists in the scope, it's shadowed (not modified)
 //!
-//! # Shadowing vs Mutation
+/// # Shadowing vs Mutation
 //!
 //! Ruskell uses lexical scoping with shadowing:
 //!
 //! ```text
-/// do
-///     x := 1        // Outer x = 1
-///     do
-///         x := 2    // Inner x = 2 (shadows outer)
-///         print(x)   // Prints 2
-///     end
-///     print(x)       // Prints 1 (outer x unchanged)
-/// end
+//! do
+//!     x := 1        // Outer x = 1
+//!     do
+//!         x := 2    // Inner x = 2 (shadows outer)
+//!         print(x)   // Prints 2
+//!     end
+//!     print(x)       // Prints 1 (outer x unchanged)
+//! end
 /// ```
-//!
-//! # Examples
-//!
-//! ```text
+///
+/// # Examples
+///
+/// ```text
 /// // Simple assignment:
 /// // x := 42
 /// Assignment {

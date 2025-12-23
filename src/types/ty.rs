@@ -1,6 +1,6 @@
 //! # Core Type System Definitions
 //!
-//! This module defines the foundational types used in the Hindley-Milner
+//! This module defines foundational types used in Hindley-Milner
 //! type inference system: types, type variables, and type schemes.
 //!
 //! ## Overview
@@ -32,25 +32,25 @@
 //! human-readable name:
 //!
 //! ```text
-/// TypeVar { id: 0, name: Some("a") }   // 'a
-/// TypeVar { id: 1, name: None }        // 't1
-/// ```
+//! TypeVar { id: 0, name: Some("a") }   // 'a
+//! TypeVar { id: 1, name: None }        // 't1
+//! ```
 //!
 //! ## Type Schemes
 //!
 //! Type schemes represent polymorphic types by quantifying type variables:
 //!
 //! ```text
-/// Identity function type:
-/// TypeScheme {
-///     vars: [TypeVar { id: 0 }],
-///     ty: Func(Var(0), Var(0))  // 'a -> 'a
-/// }
-///
-/// // When used, we instantiate with fresh vars:
-/// // Instance 1: 't5 -> 't5
-/// // Instance 2: 't6 -> 't6
-/// ```
+//! Identity function type:
+//! TypeScheme {
+//!     vars: [TypeVar { id: 0 }],
+//!     ty: Func(Var(0), Var(0))  // 'a -> 'a
+//! }
+//!
+//! // When used, we instantiate with fresh vars:
+//! // Instance 1: 't5 -> 't5
+//! // Instance 2: 't6 -> 't6
+//! ```
 //!
 //! ## Related Modules
 //!
@@ -201,28 +201,28 @@ impl Type {
 
     /// Get the set of free type variables in this type.
     ///
-/// Free type variables are those that are not bound by a
-/// quantifier (i.e., not in a type scheme's variable list).
-///
-/// # Returns
-///
-/// A `HashSet` containing all free type variables in this type
-///
-/// # Examples
-///
-/// ```text
-/// // Concrete types have no free vars:
-/// Int.free_type_vars()            // {}
-/// String.free_type_vars()         // {}
-///
-/// // Type variables are free by default:
-/// Var('a).free_type_vars()       // {'a'}
-///
-/// // Function types collect free vars from both parts:
-/// Func(Var('a), Int).free_type_vars()     // {'a'}
-/// Func(Var('a), Var('b')).free_type_vars() // {'a', 'b'}
-/// Func(Var('a), Var('a')).free_type_vars() // {'a'} (single element)
-/// ```
+    /// Free type variables are those that are not bound by a
+    /// quantifier (i.e., not in a type scheme's variable list).
+    ///
+    /// # Returns
+    ///
+    /// A `HashSet` containing all free type variables in this type
+    ///
+    /// # Examples
+    ///
+    /// ```text
+    /// // Concrete types have no free vars:
+    /// Int.free_type_vars()            // {}
+    /// String.free_type_vars()         // {}
+    ///
+    /// // Type variables are free by default:
+    /// Var('a).free_type_vars()       // {'a'}
+    ///
+    /// // Function types collect free vars from both parts:
+    /// Func(Var('a), Int).free_type_vars()     // {'a'}
+    /// Func(Var('a), Var('b')).free_type_vars() // {'a', 'b'}
+    /// Func(Var('a), Var('a')).free_type_vars() // {'a'} (single element)
+    /// ```
     pub fn free_type_vars(&self) -> HashSet<TypeVar> {
         match self {
             Type::Int | Type::String | Type::Unit | Type::Bool => HashSet::new(),
@@ -240,31 +240,31 @@ impl Type {
     }
 
     /// Convert this type to a human-readable string representation.
-///
-/// Uses Haskell-style notation with type variables prefixed with `'`.
-///
-/// # Returns
-///
-/// A string representation of this type
-///
-/// # Examples
-///
-/// ```text
-/// Int.pretty()                    // "Int"
-/// String.pretty()                 // "String"
-/// Unit.pretty()                    // "Unit"
-/// Bool.pretty()                    // "Bool"
-///
-/// Var('a).pretty()               // "'a"
-/// Var(unamed).pretty()            // "'t0" (or "'t5", etc.)
-///
-/// Func(Int, String).pretty()       // "Int -> String"
-/// Func(Int, Int).pretty()        // "Int -> Int"
-///
-/// // Nested functions use parentheses for clarity:
-/// Func(Func(Int, Int), String).pretty()  // "(Int -> Int) -> String"
-/// Func(Int, Func(Int, String)).pretty()  // "Int -> Int -> String"
-/// ```
+    ///
+    /// Uses Haskell-style notation with type variables prefixed with `'`.
+    ///
+    /// # Returns
+    ///
+    /// A string representation of this type
+    ///
+    /// # Examples
+    ///
+    /// ```text
+    /// Int.pretty()                    // "Int"
+    /// String.pretty()                 // "String"
+    /// Unit.pretty()                    // "Unit"
+    /// Bool.pretty()                    // "Bool"
+    ///
+    /// Var('a).pretty()               // "'a"
+    /// Var(unamed).pretty()            // "'t0" (or "'t5", etc.)
+    ///
+    /// Func(Int, String).pretty()       // "Int -> String"
+    /// Func(Int, Int).pretty()        // "Int -> Int"
+    ///
+    /// // Nested functions use parentheses for clarity:
+    /// Func(Func(Int, Int), String).pretty()  // "(Int -> Int) -> String"
+    /// Func(Int, Func(Int, String)).pretty()  // "Int -> Int -> String"
+    /// ```
     pub fn pretty(&self) -> String {
         match self {
             Type::Int => "Int".to_string(),

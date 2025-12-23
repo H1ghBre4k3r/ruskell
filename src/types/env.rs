@@ -31,33 +31,33 @@
 //! with fresh type variables, enabling polymorphism:
 //!
 //! ```text
-/// // Environment contains:
-/// // id: forall 'a. 'a -> 'a
-///
-/// // First use:
-/// // instantiate 'a -> 'a with 't0 -> 't0
-/// // id(42) : Int -> Int (after unification)
-///
-/// // Second use:
-/// // instantiate 'a -> 'a with 't1 -> 't1
-/// // id("hello") : String -> String (after unification)
-/// ```
+//! // Environment contains:
+//! // id: forall 'a. 'a -> 'a
+//!
+//! // First use:
+//! // instantiate 'a -> 'a with 't0 -> 't0
+//! // id(42) : Int -> Int (after unification)
+//!
+//! // Second use:
+//! // instantiate 'a -> 'a with 't1 -> 't1
+//! // id("hello") : String -> String (after unification)
+//! ```
 //!
 //! ## Lexical Scoping and Shadowing
 //!
 //! The environment supports hierarchical scoping through parent links:
 //!
 //! ```text
-/// // Outer environment:
-/// // { x: Int, y: String }
-///
-/// // Inner environment (with parent):
-/// // { x: Bool }  // Shadows outer x
-///
-/// // Lookup in inner:
-/// // x -> Bool (from inner, shadows outer)
-/// // y -> String (from parent)
-/// ```
+//! // Outer environment:
+//! // { x: Int, y: String }
+//!
+//! // Inner environment (with parent):
+//! // { x: Bool }  // Shadows outer x
+//!
+//! // Lookup in inner:
+//! // x -> Bool (from inner, shadows outer)
+//! // y -> String (from parent)
+//! ```
 //!
 //! ## Free Type Variables
 //!
@@ -310,56 +310,56 @@ impl TypeEnv {
     }
 
     /// Get set of free type variables in this environment.
-///
-/// Free type variables are those that appear in any binding's type
-/// but are NOT quantified by that binding's type scheme.
-///
-/// # Returns
-///
-/// A `HashSet` of all free type variables in this environment
-/// and all parent environments
-///
-/// # Purpose
-///
-/// Free variables in the environment determine what variables can
-/// be generalized in let-polymorphism. When defining a variable with:
-///
-/// ```text
-/// let x = expr
-/// ```
-///
-/// We quantify over variables that are free in `expr.type` but NOT
-/// free in the environment. This prevents generalizing variables
-/// that are constrained by the context.
-///
-/// # Example
-///
-/// ```text
-/// // Monomorphic binding (no quantification):
-/// // x: 'a
-/// // Free vars: {'a'}
-/// env.extend("x", TypeScheme { vars: [], ty: Var('a') })
-/// env.free_type_vars()  // {'a'}
-///
-/// // Polymorphic binding (quantified):
-/// // id: forall 'a. 'a -> 'a
-/// // Free vars: {} (none - 'a is quantified)
-/// let var_a = TypeVar::new(0);
-/// env.extend("id", TypeScheme {
-///     vars: vec![var_a.clone()],
-///     ty: Func(Var(var_a.clone()), Var(var_a)),
-/// })
-/// env.free_type_vars()  // {} (no free vars)
-///
-/// // With parent:
-/// // Parent has: y: 'b
-/// let var_b = TypeVar::new(1);
-/// let parent = TypeEnv::with_bindings(vec![
-///     ("y".to_string(), TypeScheme { vars: [], ty: Var(var_b.clone()) }),
-/// ]);
-/// let child = TypeEnv::with_parent(parent);
-/// child.free_type_vars()  // {'b'} (from parent)
-/// ```
+    ///
+    /// Free type variables are those that appear in any binding's type
+    /// but are NOT quantified by that binding's type scheme.
+    ///
+    /// # Returns
+    ///
+    /// A `HashSet` of all free type variables in this environment
+    /// and all parent environments
+    ///
+    /// # Purpose
+    ///
+    /// Free variables in the environment determine what variables can
+    /// be generalized in let-polymorphism. When defining a variable with:
+    ///
+    /// ```text
+    /// let x = expr
+    /// ```
+    ///
+    /// We quantify over variables that are free in `expr.type` but NOT
+    /// free in the environment. This prevents generalizing variables
+    /// that are constrained by the context.
+    ///
+    /// # Example
+    ///
+    /// ```text
+    /// // Monomorphic binding (no quantification):
+    /// // x: 'a
+    /// // Free vars: {'a'}
+    /// env.extend("x", TypeScheme { vars: [], ty: Var('a') })
+    /// env.free_type_vars()  // {'a'}
+    ///
+    /// // Polymorphic binding (quantified):
+    /// // id: forall 'a. 'a -> 'a
+    /// // Free vars: {} (none - 'a is quantified)
+    /// let var_a = TypeVar::new(0);
+    /// env.extend("id", TypeScheme {
+    ///     vars: vec![var_a.clone()],
+    ///     ty: Func(Var(var_a.clone()), Var(var_a)),
+    /// })
+    /// env.free_type_vars()  // {} (no free vars)
+    ///
+    /// // With parent:
+    /// // Parent has: y: 'b
+    /// let var_b = TypeVar::new(1);
+    /// let parent = TypeEnv::with_bindings(vec![
+    ///     ("y".to_string(), TypeScheme { vars: [], ty: Var(var_b.clone()) }),
+    /// ]);
+    /// let child = TypeEnv::with_parent(parent);
+    /// child.free_type_vars()  // {'b'} (from parent)
+    /// ```
     pub fn free_type_vars(&self) -> HashSet<TypeVar> {
         let mut free = HashSet::new();
         for scheme in self.bindings.values() {
@@ -378,37 +378,37 @@ impl TypeEnv {
     }
 
     /// Apply a substitution to all types in this environment.
-///
-/// Returns a new environment with the substitution applied to
-/// all type schemes in this environment and all parents.
-///
-/// # Arguments
-///
-/// * `subst` - The substitution to apply
-///
-/// # Returns
-///
-/// A new environment with substitution applied
-///
-/// # Purpose
-///
-/// During type inference, we discover substitutions that unify
-/// types (e.g., `'a := Int`). We apply these substitutions
-/// to environments to update stored type information.
-///
-/// # Example
-///
-/// ```text
-/// // Environment contains:
-/// // x: 'a
-///
-/// // After unification, we know 'a := Int:
-/// let subst = Substitution::singleton(var_a, Type::Int);
-/// let new_env = env.apply_subst(&subst);
-///
-/// // new_env contains:
-/// // x: Int (not 'a anymore)
-/// ```
+    ///
+    /// Returns a new environment with the substitution applied to
+    /// all type schemes in this environment and all parents.
+    ///
+    /// # Arguments
+    ///
+    /// * `subst` - The substitution to apply
+    ///
+    /// # Returns
+    ///
+    /// A new environment with substitution applied
+    ///
+    /// # Purpose
+    ///
+    /// During type inference, we discover substitutions that unify
+    /// types (e.g., `'a := Int`). We apply these substitutions
+    /// to environments to update stored type information.
+    ///
+    /// # Example
+    ///
+    /// ```text
+    /// // Environment contains:
+    /// // x: 'a
+    ///
+    /// // After unification, we know 'a := Int:
+    /// let subst = Substitution::singleton(var_a, Type::Int);
+    /// let new_env = env.apply_subst(&subst);
+    ///
+    /// // new_env contains:
+    /// // x: Int (not 'a anymore)
+    /// ```
     pub fn apply_subst(&self, subst: &Substitution) -> TypeEnv {
         let bindings = self
             .bindings
