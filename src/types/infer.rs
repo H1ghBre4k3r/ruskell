@@ -117,21 +117,61 @@ impl fmt::Display for TypeError {
 
 impl std::error::Error for TypeError {}
 
+/// Type inference context.
+///
+/// This struct maintains the state needed during type inference, primarily
+/// a counter for generating fresh, unique type variables.
 pub struct Infer {
+    /// Counter for generating unique type variable IDs
     next_var: usize,
 }
 
 impl Infer {
+    /// Create a new inference context with no type variables allocated yet.
     pub fn new() -> Self {
         Infer { next_var: 0 }
     }
 
+    /// Generate a fresh, unique type variable.
+    ///
+    /// Each call returns a new type variable that hasn't been used before,
+    /// ensuring all type variables are distinct during inference.
+    ///
+    /// # Example
+    ///
+    /// ```text
+    /// infer.fresh_var()  // 't0
+    /// infer.fresh_var()  // 't1
+    /// infer.fresh_var()  // 't2
+    /// ```
     fn fresh_var(&mut self) -> TypeVar {
         let id = self.next_var;
         self.next_var += 1;
         TypeVar::new(id)
     }
 
+    /// Instantiate a polymorphic type scheme with fresh type variables.
+    ///
+    /// This is used when we **use** a polymorphic value - we replace all
+    /// quantified type variables with fresh ones, allowing the value to be
+    /// used at different types in different contexts.
+    ///
+    /// # How It Works
+    ///
+    /// 1. For each quantified variable in the scheme, generate a fresh type variable
+    /// 2. Build a substitution mapping old vars to fresh vars
+    /// 3. Apply the substitution to the scheme's body type
+    ///
+    /// # Example
+    ///
+    /// ```text
+    /// Scheme: forall 'a. 'a -> 'a
+    /// Instantiation 1: 't0 -> 't0
+    /// Instantiation 2: 't1 -> 't1
+    /// ```
+    ///
+    /// This allows the same polymorphic function to be used at Int and String
+    /// in the same expression.
     fn instantiate(&mut self, scheme: &TypeScheme) -> Type {
         let subst: HashMap<_, _> = scheme
             .vars
@@ -141,6 +181,33 @@ impl Infer {
         Substitution(subst).apply(&scheme.ty)
     }
 
+    /// Generalize a type into a polymorphic type scheme.
+    ///
+    /// This is used when we **define** a value in a let binding - we quantify
+    /// over all type variables that are free in the type but not free in the
+    /// environment, making the value polymorphic.
+    ///
+    /// # How It Works
+    ///
+    /// 1. Find all free type variables in the type
+    /// 2. Find all free type variables in the environment
+    /// 3. Quantify over variables that are free in the type but not in the environment
+    ///
+    /// # Example
+    ///
+    /// ```text
+    /// Environment: { }
+    /// Type: 't0 -> 't0
+    /// Generalized: forall 't0. 't0 -> 't0
+    ///
+    /// Environment: { x: 't1 }
+    /// Type: 't1 -> 't0
+    /// Generalized: forall 't0. 't1 -> 't0  // 't1 is not quantified (appears in env)
+    /// ```
+    ///
+    /// This implements **let-polymorphism**, which allows locally-bound values
+    /// to be polymorphic while preventing top-level recursion from creating
+    /// infinite types.
     fn generalize(&self, env: &TypeEnv, ty: &Type) -> TypeScheme {
         let free_in_env = env.free_type_vars();
         let free_in_ty = ty.free_type_vars();
@@ -151,6 +218,54 @@ impl Infer {
         }
     }
 
+    /// Infer the type of a Core expression.
+    ///
+    /// This is the main type inference function that recursively traverses
+    /// the expression tree, generating constraints and solving them through
+    /// unification.
+    ///
+    /// # Algorithm
+    ///
+    /// The algorithm follows the Hindley-Milner inference rules:
+    ///
+    /// 1. **Literals**: Return their fixed type (Int, String, Bool, Unit)
+    /// 2. **Variables**: Look up in environment and instantiate
+    /// 3. **Lambdas**: Generate fresh type var for param, extend env, infer body
+    /// 4. **Applications**: Infer function and arg, unify function type with (arg -> result)
+    /// 5. **Operators**: Check operand types match operator signature
+    /// 6. **If-Then-Else**: Check condition is Bool, unify branch types
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok((substitution, type))` where:
+    /// - `substitution`: Type variable assignments discovered during inference
+    /// - `type`: The inferred type of the expression (with substitution applied)
+    ///
+    /// Returns `Err(TypeError)` if type checking fails.
+    ///
+    /// # Example Trace
+    ///
+    /// ```text
+    /// Expression: \x => x + 1
+    ///
+    /// Step 1: This is a lambda, so:
+    ///   - Create fresh var 't0 for parameter x
+    ///   - Extend env: { x: 't0 }
+    ///   - Infer body: x + 1
+    ///
+    /// Step 2: Infer x + 1 (binary operation):
+    ///   - Left operand x has type 't0
+    ///   - Right operand 1 has type Int
+    ///   - Operator + requires Int -> Int -> Int
+    ///   - Unify 't0 with Int → [t0 := Int]
+    ///   - Unify Int with Int → []
+    ///   - Result type: Int
+    ///
+    /// Step 3: Build lambda type:
+    ///   - Parameter type (after substitution): Int
+    ///   - Body type: Int
+    ///   - Result: Int -> Int
+    /// ```
     pub fn infer_expr(
         &mut self,
         env: &TypeEnv,

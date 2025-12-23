@@ -1,21 +1,68 @@
-//! Lambda Lifting - Extract closures to standalone top-level functions
+//! # Lambda Lifting - Closure Conversion
 //!
-//! This module implements smart lambda lifting by extracting lambda expressions
-//! that capture free variables to standalone top-level functions, making all
-//! captures explicit as parameters.
+//! This module implements **lambda lifting**, also known as **closure conversion**,
+//! which transforms closures (lambdas that capture free variables) into standalone
+//! top-level functions with explicit capture parameters.
 //!
-//! **Key distinction:**
-//! - **Parameter lambdas** (from multi-param functions) are preserved
-//! - **Closures** (lambdas that capture variables) are extracted
+//! ## Pipeline Position
 //!
-//! Example - multi-parameter function (parameter lambdas preserved):
-//! ```ruskell
-//! add x y = x + y
+//! ```text
+//! Parser → Surface AST → Desugaring → Core AST → [LAMBDA LIFTING] → Lifted Core AST → Type Checker
 //! ```
-//! After desugaring: `add = \x => \y => x + y`
-//! After lifting: **unchanged** (no captures, just parameter structure)
 //!
-//! Example - closure (extracted and captures made explicit):
+//! ## What is Lambda Lifting?
+//!
+//! Lambda lifting is a transformation that eliminates closures by:
+//! 1. **Identifying captured variables** (free variables in lambda bodies)
+//! 2. **Extracting lambdas to top-level functions** with explicit parameters for captures
+//! 3. **Replacing lambdas with partial applications** of the new functions
+//!
+//! ## Why Do We Need Lambda Lifting?
+//!
+//! Lambda lifting makes closures **explicit** in the program structure:
+//!
+//! 1. **Simplifies Type Checking** - All captures are visible as parameters
+//! 2. **Enables Optimizations** - Can analyze and optimize closure allocations
+//! 3. **Supports Compilation** - Easier to compile to native code or bytecode
+//! 4. **Clear Semantics** - Makes variable capture explicit in the AST
+//!
+//! ## How It Works
+//!
+//! ### Free Variable Analysis
+//!
+//! First, we identify which variables are **free** in a lambda expression:
+//!
+//! ```text
+//! Free variables = Variables used - Variables bound
+//!
+//! \x => x + y
+//! Used: {x, y}
+//! Bound: {x}
+//! Free: {y}  ← This is a closure!
+//! ```
+//!
+//! ### Lambda Classification
+//!
+//! We distinguish between two kinds of lambdas:
+//!
+//! 1. **Parameter Lambdas** - From multi-parameter function desugaring
+//! 2. **Closure Lambdas** - Actually capture free variables
+//!
+//! Only **closure lambdas** are lifted; parameter lambdas are preserved.
+//!
+//! ### Lifting Transformation
+//!
+//! For a lambda with captures, we:
+//!
+//! 1. Generate a unique name (e.g., `lambda_0`)
+//! 2. Create a function with capture parameters first, then original parameters
+//! 3. Replace the lambda with a partial application
+//!
+//! ## Example Transformations
+//!
+//! ### Example 1: Simple Closure
+//!
+//! **Before Lifting:**
 //! ```ruskell
 //! main = do
 //!     a := 1
@@ -24,16 +71,153 @@
 //! end
 //! ```
 //!
-//! After lifting:
+//! **Free Variable Analysis:**
+//! ```text
+//! Lambda: \x => x + a
+//! Free: {a}  ← Captures 'a' from outer scope
+//! ```
+//!
+//! **After Lifting:**
 //! ```ruskell
 //! lambda_0 a x = x + a
 //!
 //! main = do
 //!     a := 1
-//!     f := lambda_0(a)
+//!     f := lambda_0(a)    // Partial application with captured value
+//!     f(5)                // Equivalent to: lambda_0(a)(5)
+//! end
+//! ```
+//!
+//! ### Example 2: Multi-Parameter Function (No Lifting)
+//!
+//! **Before Lifting (after desugaring):**
+//! ```ruskell
+//! add = \x => \y => x + y
+//! ```
+//!
+//! **Free Variable Analysis:**
+//! ```text
+//! Outer lambda: \x => ...
+//!   Free: {}  ← No captures
+//! Inner lambda: \y => x + y
+//!   Free: {x}  ← But x is a parameter, not a capture!
+//! ```
+//!
+//! **After Lifting:**
+//! ```ruskell
+//! add = \x => \y => x + y    // Unchanged! These are parameter lambdas
+//! ```
+//!
+//! ### Example 3: Nested Closures
+//!
+//! **Before Lifting:**
+//! ```ruskell
+//! main = do
+//!     a := 1
+//!     b := 2
+//!     f := \x => do
+//!         g := \y => x + y + a + b
+//!         g(10)
+//!     end
 //!     f(5)
 //! end
 //! ```
+//!
+//! **After Lifting:**
+//! ```ruskell
+//! lambda_1 a b x y = x + y + a + b
+//!
+//! lambda_0 a b x = do
+//!     g := lambda_1(a)(b)(x)
+//!     g(10)
+//! end
+//!
+//! main = do
+//!     a := 1
+//!     b := 2
+//!     f := lambda_0(a)(b)
+//!     f(5)
+//! end
+//! ```
+//!
+//! ## Smart Lambda Lifting
+//!
+//! This module implements **smart lambda lifting** which:
+//!
+//! 1. **Preserves parameter structure** - Doesn't lift parameter lambdas from desugaring
+//! 2. **Only lifts closures** - Lambdas that actually capture free variables
+//! 3. **Maintains semantics** - Partial application has the same behavior as closure
+//!
+//! ### Why Preserve Parameter Lambdas?
+//!
+//! Consider:
+//! ```ruskell
+//! add x y = x + y    // Desugars to: add = \x => \y => x + y
+//! ```
+//!
+//! If we lifted both lambdas:
+//! ```ruskell
+//! lambda_1 x y = x + y
+//! lambda_0 x = lambda_1(x)
+//! add = lambda_0
+//! ```
+//!
+//! This is unnecessarily complex! Instead, we recognize that nested lambdas from
+//! desugaring are just parameter structure and preserve them.
+//!
+//! ## Free Variable Calculation
+//!
+//! Free variables are computed recursively:
+//!
+//! ### Expressions
+//!
+//! - **Variables**: `free(x) = {x}` if not global
+//! - **Literals**: `free(42) = ∅`
+//! - **Lambdas**: `free(\x => e) = free(e) - {x}`
+//! - **Applications**: `free(f(x)) = free(f) ∪ free(x)`
+//! - **Binary Ops**: `free(x + y) = free(x) ∪ free(y)`
+//!
+//! ### Blocks
+//!
+//! For blocks, we track bindings sequentially:
+//!
+//! ```text
+//! do
+//!   a := e1
+//!   b := e2
+//!   e3
+//! end
+//!
+//! free = (free(e1) ∪ (free(e2) - {a}) ∪ (free(e3) - {a, b}))
+//! ```
+//!
+//! Variables bound earlier in the block aren't free in later statements.
+//!
+//! ## Global Functions
+//!
+//! We don't treat global function names as free variables:
+//!
+//! ```ruskell
+//! factorial 0 = 1
+//! factorial n = n * factorial(n - 1)
+//! ```
+//!
+//! Even though `factorial` appears in its own body, it's **not** a free variable
+//! because it's a global function name.
+//!
+//! ## Implementation Details
+//!
+//! The lifting algorithm uses a context (`LiftContext`) that tracks:
+//!
+//! - `globals`: Set of global function names (don't capture these)
+//! - `lifted_functions`: Accumulates extracted lambdas
+//! - `lambda_counter`: Generates unique names for lifted lambdas
+//!
+//! ## Related Modules
+//!
+//! - [`crate::desugar`] - Runs before lambda lifting
+//! - [`crate::types`] - Type checks lifted code
+//! - [`crate::core`] - Core AST definitions
 
 use std::collections::HashSet;
 

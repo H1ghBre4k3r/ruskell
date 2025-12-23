@@ -32,6 +32,45 @@ impl fmt::Display for UnifyError {
     }
 }
 
+/// Check if a type variable occurs within a type (occurs check).
+///
+/// The occurs check prevents the creation of infinite types by ensuring
+/// we never create a substitution like `'t0 = 't0 -> Int`.
+///
+/// # Why Is This Important?
+///
+/// Without the occurs check, unification could create infinite types:
+///
+/// ```text
+/// Unify('t0, 't0 -> Int):
+///   Without occurs check: [t0 := 't0 -> Int]
+///   
+///   Applying this gives:
+///   't0 = 't0 -> Int
+///       = ('t0 -> Int) -> Int      // substitute 't0
+///       = (('t0 -> Int) -> Int) -> Int    // substitute again
+///       = ...                       // infinite!
+/// ```
+///
+/// The occurs check detects this situation and fails unification.
+///
+/// # Arguments
+///
+/// * `var` - The type variable to search for
+/// * `ty` - The type to search within
+///
+/// # Returns
+///
+/// `true` if `var` appears anywhere in `ty`, `false` otherwise
+///
+/// # Examples
+///
+/// ```text
+/// occurs_in('t0, Int) = false
+/// occurs_in('t0, 't0) = true
+/// occurs_in('t0, 't0 -> Int) = true
+/// occurs_in('t0, 't1 -> 't2) = false
+/// ```
 fn occurs_in(var: &TypeVar, ty: &Type) -> bool {
     match ty {
         Type::Int | Type::String | Type::Unit | Type::Bool => false,
@@ -40,6 +79,94 @@ fn occurs_in(var: &TypeVar, ty: &Type) -> bool {
     }
 }
 
+/// Unify two types, finding a substitution that makes them equal.
+///
+/// This is the core of the Hindley-Milner type inference algorithm. Unification
+/// solves type equations by finding assignments to type variables that make
+/// two types identical.
+///
+/// # Algorithm
+///
+/// The algorithm works by structural recursion on the type structure:
+///
+/// ## Base Cases (Concrete Types)
+///
+/// ```text
+/// Unify(Int, Int) = ∅          // Empty substitution
+/// Unify(String, String) = ∅
+/// Unify(Bool, Bool) = ∅
+/// Unify(Unit, Unit) = ∅
+/// Unify(Int, String) = Error   // Type mismatch
+/// ```
+///
+/// ## Type Variables
+///
+/// ```text
+/// Unify('t0, 't0) = ∅          // Same variable
+/// Unify('t0, 't1) = [t0 := 't1]   // Different variables
+/// Unify('t0, Int) = [t0 := Int]   // Variable with concrete type
+/// Unify('t0, 't0 -> Int) = Error  // Occurs check fails!
+/// ```
+///
+/// Before creating a substitution `[var := type]`, we perform an **occurs check**
+/// to ensure `var` doesn't appear in `type`. This prevents infinite types.
+///
+/// ## Function Types
+///
+/// ```text
+/// Unify(t1 -> t2, t3 -> t4):
+///   1. Unify t1 with t3, getting S1
+///   2. Apply S1 to t2 and t4
+///   3. Unify S1(t2) with S1(t4), getting S2
+///   4. Return S2 ∘ S1 (composition)
+/// ```
+///
+/// Example:
+/// ```text
+/// Unify('t0 -> 't1, Int -> Bool):
+///   Step 1: Unify 't0 with Int → [t0 := Int]
+///   Step 2: Apply [t0 := Int] to 't1 and Bool → 't1, Bool
+///   Step 3: Unify 't1 with Bool → [t1 := Bool]
+///   Step 4: Compose: [t0 := Int, t1 := Bool]
+/// ```
+///
+/// # Why Composition Matters
+///
+/// We must apply S1 before unifying the return types because S1 might affect them:
+///
+/// ```text
+/// Unify('t0 -> 't0, Int -> 't1):
+///   Step 1: Unify 't0 with Int → S1 = [t0 := Int]
+///   Step 2: Apply S1: 't0 becomes Int
+///   Step 3: Unify Int with 't1 → S2 = [t1 := Int]
+///   Result: [t0 := Int, t1 := Int]
+///
+/// Without applying S1, we'd incorrectly get [t0 := Int, t1 := 't0]
+/// ```
+///
+/// # Arguments
+///
+/// * `t1` - First type to unify
+/// * `t2` - Second type to unify
+///
+/// # Returns
+///
+/// * `Ok(Substitution)` - A substitution that makes t1 equal to t2
+/// * `Err(UnifyError::Mismatch)` - Types cannot be unified (e.g., Int vs String)
+/// * `Err(UnifyError::OccursCheck)` - Would create infinite type
+///
+/// # Examples
+///
+/// ```text
+/// // Success cases
+/// unify(Int, Int) = Ok(∅)
+/// unify('t0, Int) = Ok([t0 := Int])
+/// unify('t0 -> 't1, Int -> Bool) = Ok([t0 := Int, t1 := Bool])
+///
+/// // Error cases
+/// unify(Int, String) = Err(Mismatch)
+/// unify('t0, 't0 -> Int) = Err(OccursCheck)
+/// ```
 pub fn unify(t1: &Type, t2: &Type) -> Result<Substitution, UnifyError> {
     match (t1, t2) {
         // Same concrete types unify with empty substitution
