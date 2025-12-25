@@ -19,40 +19,40 @@
 //! Patterns are matched against a "scrutinee" value in order:
 //!
 //! ```text
-/// match x of
-///     42 => "answer"
-///     n  => n * 2
-///     _  => "other"
-/// end
-///
-/// // If x is 42, returns "answer"
-/// // If x is any other number, returns "x * 2"
-/// // If x is not a number, returns "other"
-/// ```
+//! match x of
+//!     42 => "answer"
+//!     n  => n * 2
+//!     _  => "other"
+//! end
+//!
+//! // If x is 42, returns "answer"
+//! // If x is any other number, returns "x * 2"
+//! // If x is not a number, returns "other"
+//! ```
 //!
 //! ## Multi-Clause Functions
 //!
 //! Pattern matching enables defining functions with multiple clauses:
 //!
 //! ```text
-/// factorial 0 = 1
-/// factorial n = n * factorial(n - 1)
-///
-/// // This becomes:
-/// FunctionDef::Multi {
-///     name: "factorial",
-///     clauses: [
-///         FunctionClause { patterns: [0], body: "1" },
-///         FunctionClause { patterns: ["n"], body: "n * factorial(n - 1)" },
-///     ],
-/// }
-/// ```
+//! factorial 0 = 1
+//! factorial n = n * factorial(n - 1)
+//!
+//! // This becomes:
+//! FunctionDef::Multi {
+//!     name: "factorial",
+//!     clauses: [
+//!         FunctionClause { patterns: [0], body: "1" },
+//!         FunctionClause { patterns: ["n"], body: "n * factorial(n - 1)" },
+//!     ],
+//! }
+//! ```
 //!
 //! ## Pipeline Position
 //!
 //! ```text
-/// Parser → Surface AST → [PATTERNS] → Desugaring → Core AST (if-then-else chains)
-/// ```
+//! Parser → Surface AST → [PATTERNS] → Desugaring → Core AST (if-then-else chains)
+//! ```
 //!
 //! ## Related Modules
 //!

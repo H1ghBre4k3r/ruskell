@@ -114,26 +114,26 @@ pub enum Statement<T> {
 /// * `info` - Metadata (currently unused)
 ///
 /// # Semantics
-//!
+///
 /// When an assignment is executed:
-//!
-//! 1. Evaluate the `value` expression
-//! 2. Bind the resulting value to `name` in the current scope
-//! 3. If `name` already exists in the scope, it's shadowed (not modified)
-//!
+///
+/// 1. Evaluate the `value` expression
+/// 2. Bind the resulting value to `name` in the current scope
+/// 3. If `name` already exists in the scope, it's shadowed (not modified)
+///
 /// # Shadowing vs Mutation
-//!
-//! Ruskell uses lexical scoping with shadowing:
-//!
-//! ```text
-//! do
-//!     x := 1        // Outer x = 1
-//!     do
-//!         x := 2    // Inner x = 2 (shadows outer)
-//!         print(x)   // Prints 2
-//!     end
-//!     print(x)       // Prints 1 (outer x unchanged)
-//! end
+///
+/// Ruskell uses lexical scoping with shadowing:
+///
+/// ```text
+/// do
+///     x := 1        // Outer x = 1
+///     do
+///         x := 2    // Inner x = 2 (shadows outer)
+///         print(x)   // Prints 2
+///     end
+///     print(x)       // Prints 1 (outer x unchanged)
+/// end
 /// ```
 ///
 /// # Examples
