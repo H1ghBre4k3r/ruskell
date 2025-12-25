@@ -66,7 +66,7 @@
 //!
 //! A complete Ruskell program consists of:
 //!
-//! ```rust
+//! ```text
 //! pub struct Program<T> {
 //!     pub main: FunctionDef<T>,      // Entry point
 //!     pub functions: Vec<FunctionDef<T>>,  // Other functions
@@ -77,7 +77,7 @@
 //!
 //! Functions can be single-clause or multi-clause:
 //!
-//! ```rust
+//! ```text
 //! pub enum FunctionDef<T> {
 //!     Single(Function<T>),           // name params = body
 //!     Multi {                         // Pattern matching

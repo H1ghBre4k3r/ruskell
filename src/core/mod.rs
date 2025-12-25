@@ -67,7 +67,7 @@
 //!
 //! Core expressions are simpler than surface expressions:
 //!
-//! ```rust
+//! ```text
 //! pub enum CoreExpr<T> {
 //!     Unit(CoreUnit<T>),              // ()
 //!     Ident(CoreIdent<T>),            // x

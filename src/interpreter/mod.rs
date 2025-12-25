@@ -36,7 +36,7 @@
 //!
 //! During execution, expressions evaluate to runtime values (`RValue`):
 //!
-//! ```rust
+//! ```text
 //! pub enum RValue {
 //!     Unit,                           // ()
 //!     Integer(i128),                  // 42
@@ -61,7 +61,7 @@
 //!
 //! The `CapturedEnv` stores the values of free variables:
 //!
-//! ```rust
+//! ```text
 //! pub struct CapturedEnv(HashMap<String, RValue>);
 //! ```
 //!
@@ -69,7 +69,7 @@
 //!
 //! The interpreter maintains a scope chain for variable resolution:
 //!
-//! ```rust
+//! ```text
 //! pub struct Scope {
 //!     frames: Vec<HashMap<String, RValue>>,
 //!     functions: HashMap<String, CoreFunction>,
@@ -120,7 +120,7 @@
 //!
 //! Create a closure capturing the current environment:
 //!
-//! ```rust
+//! ```text
 //! RValue::CoreLambda(lambda, captured_env)
 //! ```
 //!
@@ -140,7 +140,7 @@
 //!
 //! Evaluate both operands and apply the operation:
 //!
-//! ```rust
+//! ```text
 //! match (left_val, right_val) {
 //!     (Integer(a), Integer(b)) => match op {
 //!         Add => Integer(a + b),
