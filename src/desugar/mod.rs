@@ -1,9 +1,110 @@
-//! Desugaring - Transform surface AST to core AST
+//! # Desugaring - Surface AST to Core AST Transformation
 //!
-//! This module handles desugaring transformations:
-//! - Multi-parameter lambdas → nested single-parameter lambdas
-//! - Multi-argument function calls → nested single-argument calls
-//! - Lambda lifting (closure conversion) → explicit capture parameters
+//! This module implements the **desugaring phase** of the Ruskell compiler pipeline,
+//! transforming the rich, user-friendly Surface AST into the simpler Core AST that is
+//! easier to type check and interpret.
+//!
+//! ## Pipeline Position
+//!
+//! ```text
+//! Parser → Surface AST → [DESUGARING] → Core AST → Type Checker → Interpreter
+//! ```
+//!
+//! ## What is Desugaring?
+//!
+//! Desugaring is the process of translating "syntactic sugar" (convenient but complex
+//! language features) into simpler, more primitive constructs. This simplifies later
+//! compiler stages by reducing the number of language constructs they need to handle.
+//!
+//! ## Transformations Performed
+//!
+//! ### 1. Multi-Parameter Lambdas → Nested Single-Parameter Lambdas
+//!
+//! **Surface Syntax:**
+//! ```ruskell
+//! \x, y, z => x + y + z
+//! ```
+//!
+//! **Desugared to Core:**
+//! ```ruskell
+//! \x => \y => \z => x + y + z
+//! ```
+//!
+//! This is called **currying** and allows all lambdas in Core AST to have exactly one
+//! parameter, simplifying type checking and evaluation.
+//!
+//! ### 2. Multi-Argument Function Calls → Nested Single-Argument Calls
+//!
+//! **Surface Syntax:**
+//! ```ruskell
+//! add(1, 2, 3)
+//! ```
+//!
+//! **Desugared to Core:**
+//! ```ruskell
+//! add(1)(2)(3)
+//! ```
+//!
+//! This matches the curried lambda structure and ensures all function calls in Core AST
+//! pass exactly one argument.
+//!
+//! ### 3. Multi-Clause Functions → Pattern Matching with If-Then-Else
+//!
+//! **Surface Syntax:**
+//! ```ruskell
+//! factorial 0 = 1
+//! factorial n = n * factorial(n - 1)
+//! ```
+//!
+//! **Desugared to Core:**
+//! ```ruskell
+//! factorial = \__arg0 =>
+//!   if __arg0 == 0
+//!   then 1
+//!   else (\n => n * factorial(n - 1))(__arg0)
+//! ```
+//!
+//! Pattern matching on function arguments is converted to equality checks and variable
+//! bindings using lambda application.
+//!
+//! ### 4. Match Expressions → Nested If-Then-Else
+//!
+//! **Surface Syntax:**
+//! ```ruskell
+//! match value of
+//!   0 => "zero"
+//!   n => "other"
+//! end
+//! ```
+//!
+//! **Desugared to Core:**
+//! ```ruskell
+//! if value == 0
+//! then "zero"
+//! else (\n => "other")(value)
+//! ```
+//!
+//! ## Key Functions
+//!
+//! - [`desugar_program()`] - Entry point for desugaring a complete program
+//!
+//! The module also contains internal helper functions for desugaring lambdas,
+//! function calls, and multi-clause functions.
+//!
+//! ## Design Rationale
+//!
+//! By desugaring to a simpler Core AST:
+//! 1. **Type Checking is Simpler** - Only need to handle single-param lambdas and single-arg calls
+//! 2. **Interpreter is Simpler** - Fewer expression types to evaluate
+//! 3. **Optimizations are Easier** - Work on uniform structure
+//! 4. **Language Can Evolve** - Add surface features without changing core semantics
+//!
+//! ## Related Modules
+//!
+//! - [`crate::ast`] - Surface AST definitions (input to this module)
+//! - [`crate::core`] - Core AST definitions (output of this module)
+//! - [`lift`] - Lambda lifting pass (makes closures explicit)
+//! - [`erase`] - Type erasure (converts Core back to Surface for interpreter)
 
 pub mod erase;
 pub mod lift;
@@ -11,7 +112,25 @@ pub mod lift;
 use crate::ast;
 use crate::core::*;
 
-/// Desugar a complete program
+/// Desugar a complete program from Surface AST to Core AST.
+///
+/// This is the main entry point for the desugaring phase. It transforms a parsed
+/// program with rich syntax into a simpler core representation.
+///
+/// # Arguments
+///
+/// * `program` - A Surface AST program (from the parser)
+///
+/// # Returns
+///
+/// A Core AST program with desugared constructs
+///
+/// # Examples
+///
+/// ```text
+/// Surface: add x y = x + y
+/// Core:    add = \x => \y => x + y
+/// ```
 pub fn desugar_program(program: ast::Program<()>) -> CoreProgram<()> {
     CoreProgram {
         main: desugar_function_def(program.main),
@@ -30,22 +149,52 @@ fn desugar_function_def(def: ast::FunctionDef<()>) -> CoreFunction<()> {
     }
 }
 
-/// Desugar multi-clause function to single function with match expression
+/// Desugar multi-clause function to single function with pattern matching.
 ///
-/// Example:
+/// Multi-clause functions allow pattern matching directly on function parameters,
+/// a common pattern in functional languages. This function converts them to a
+/// single-clause function with nested if-then-else expressions for pattern checking.
+///
+/// # How It Works
+///
+/// 1. **Extract parameters**: All clauses must have the same number of patterns
+/// 2. **Generate argument names**: Create fresh names like `__arg0`, `__arg1`, etc.
+/// 3. **Build pattern checks**: For each clause, check if all patterns match
+/// 4. **Create bindings**: Bind pattern variables using lambda application
+/// 5. **Chain with if-then-else**: Try each clause sequentially
+///
+/// # Pattern Types Handled
+///
+/// - **Literal patterns** (`0`, `"hello"`, `true`): Checked with equality (`==`)
+/// - **Variable patterns** (`n`, `x`): Always match, bind the value to the variable
+/// - **Wildcard patterns** (`_`): Always match, don't bind anything
+/// - **Unit pattern** (`()`): Matches only unit value
+///
+/// # Example Transformation
+///
+/// **Input (Surface AST):**
 /// ```ruskell
 /// factorial 0 = 1
 /// factorial n = n * factorial(n - 1)
 /// ```
 ///
-/// Becomes:
+/// **Output (Core AST):**
 /// ```ruskell
 /// factorial = \__arg0 =>
-///   case __arg0 of
-///     0 => 1
-///     n => n * factorial(n - 1)
-///   end
+///   if __arg0 == 0
+///   then 1
+///   else (\n => n * factorial(n - 1))(__arg0)
 /// ```
+///
+/// # Arguments
+///
+/// * `name` - The function name
+/// * `clauses` - List of pattern clauses (must have same number of patterns)
+///
+/// # Panics
+///
+/// - If clauses is empty
+/// - If clauses have different numbers of patterns
 fn desugar_multi_clause_function(
     name: ast::expression::Ident<()>,
     clauses: Vec<ast::pattern::FunctionClause<()>>,

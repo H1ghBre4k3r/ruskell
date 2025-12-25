@@ -1,6 +1,87 @@
+//! # Core Type System Definitions
+//!
+//! This module defines foundational types used in Hindley-Milner
+//! type inference system: types, type variables, and type schemes.
+//!
+//! ## Overview
+//!
+//! The type system is built from three main components:
+//!
+//! - **Type** - Represents concrete and polymorphic types (Int, String, Bool, Unit, Var, Func)
+//! - **TypeVar** - Type variable for polymorphism (e.g., `'a`, `'b`)
+//! - **TypeScheme** - Polymorphic type with quantified variables (e.g., `forall 'a. 'a -> 'a`)
+//!
+//! ## Types
+//!
+//! Ruskell supports following concrete types:
+//!
+//! - `Int` - Integer values
+//! - `String` - String values
+//! - `Bool` - Boolean values (true, false)
+//! - `Unit` - The unit value `()`
+//!
+//! And polymorphic types:
+//!
+//! - `Var('a)` - Type variable (represents any type in polymorphic context)
+//! - `Func(t1, t2)` - Function type `t1 -> t2`
+//!
+//! ## Type Variables
+//!
+//! Type variables are placeholders that can be unified with any concrete type
+//! during type inference. They're represented with a unique ID and optional
+//! human-readable name:
+//!
+//! ```text
+//! TypeVar { id: 0, name: Some("a") }   // 'a
+//! TypeVar { id: 1, name: None }        // 't1
+//! ```
+//!
+//! ## Type Schemes
+//!
+//! Type schemes represent polymorphic types by quantifying type variables:
+//!
+//! ```text
+//! Identity function type:
+//! TypeScheme {
+//!     vars: [TypeVar { id: 0 }],
+//!     ty: Func(Var(0), Var(0))  // 'a -> 'a
+//! }
+//!
+//! // When used, we instantiate with fresh vars:
+//! // Instance 1: 't5 -> 't5
+//! // Instance 2: 't6 -> 't6
+//! ```
+//!
+//! ## Related Modules
+//!
+//! - [`crate::types::infer`] - Type inference using these types
+//! - [`crate::types::env`] - Type environment for storing type schemes
+//! - [`crate::types::subst`] - Substitutions for type variable unification
+
 use std::collections::HashSet;
 use std::fmt;
 
+/// Type variable for polymorphism.
+///
+/// Type variables represent unknown or polymorphic types during type inference.
+/// Each type variable is uniquely identified by an integer ID.
+///
+/// # Fields
+///
+/// * `id` - Unique identifier for this type variable
+/// * `name` - Optional human-readable name (e.g., "a", "b") for pretty printing
+///
+/// # Example
+///
+/// ```text
+/// // Fresh type variable (no name):
+/// TypeVar { id: 0, name: None }
+/// // Pretty prints as: 't0
+///
+/// // Named type variable (from source or inferred):
+/// TypeVar { id: 1, name: Some("a") }
+/// // Pretty prints as: 'a
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TypeVar {
     pub id: usize,
@@ -8,10 +89,43 @@ pub struct TypeVar {
 }
 
 impl TypeVar {
+    /// Create a new type variable with the given ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - Unique identifier for this type variable
+    ///
+    /// # Returns
+    ///
+    /// A new `TypeVar` with no human-readable name
+    ///
+    /// # Example
+    ///
+    /// ```text
+    /// TypeVar::new(0)   // Creates unnamed variable 't0
+    /// TypeVar::new(1)   // Creates unnamed variable 't1
+    /// ```
     pub fn new(id: usize) -> Self {
         Self { id, name: None }
     }
 
+    /// Create a new type variable with the given ID and name.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - Unique identifier for this type variable
+    /// * `name` - Human-readable name for pretty printing
+    ///
+    /// # Returns
+    ///
+    /// A new `TypeVar` with the specified name
+    ///
+    /// # Example
+    ///
+    /// ```text
+    /// TypeVar::with_name(0, "a")   // Creates variable 'a
+    /// TypeVar::with_name(1, "b")   // Creates variable 'b
+    /// ```
     pub fn with_name(id: usize, name: String) -> Self {
         Self {
             id,
@@ -20,6 +134,38 @@ impl TypeVar {
     }
 }
 
+/// All possible types in Ruskell.
+///
+/// `Type` represents both concrete types (Int, String, Bool, Unit)
+/// and polymorphic types (type variables and function types).
+///
+/// # Variants
+///
+/// * `Int` - Integer type
+/// * `String` - String type
+/// * `Unit` - Unit type (only value is `()`)
+/// * `Bool` - Boolean type
+/// * `Var` - Type variable (for polymorphism)
+/// * `Func` - Function type `parameter_type -> return_type`
+///
+/// # Examples
+///
+/// ```text
+/// // Concrete types:
+/// Type::Int                  // Int
+/// Type::String               // String
+/// Type::Bool                 // Bool
+/// Type::Unit                 // Unit
+///
+/// // Type variable:
+/// Type::Var(TypeVar::new(0))  // 't0 (or 'a if named)
+///
+/// // Function types:
+/// Type::Func(Int, Int)        // Int -> Int
+/// Type::Func(Int, String)     // Int -> String
+/// Type::Func(Int, Func(Int, Int))  // Int -> (Int -> Int)
+///                                 // or: Int -> Int -> Int
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     Int,
@@ -31,10 +177,52 @@ pub enum Type {
 }
 
 impl Type {
+    /// Create a function type from parameter and return types.
+    ///
+    /// # Arguments
+    ///
+    /// * `t1` - Parameter type (type of function's input)
+    /// * `t2` - Return type (type of function's output)
+    ///
+    /// # Returns
+    ///
+    /// A function type `t1 -> t2`
+    ///
+    /// # Examples
+    ///
+    /// ```text
+    /// Type::func(Int, Int)         // Int -> Int
+    /// Type::func(Int, String)      // Int -> String
+    /// Type::func(Int, func(Int, Int))  // Int -> Int -> Int
+    /// ```
     pub fn func(t1: Type, t2: Type) -> Self {
         Type::Func(Box::new(t1), Box::new(t2))
     }
 
+    /// Get the set of free type variables in this type.
+    ///
+    /// Free type variables are those that are not bound by a
+    /// quantifier (i.e., not in a type scheme's variable list).
+    ///
+    /// # Returns
+    ///
+    /// A `HashSet` containing all free type variables in this type
+    ///
+    /// # Examples
+    ///
+    /// ```text
+    /// // Concrete types have no free vars:
+    /// Int.free_type_vars()            // {}
+    /// String.free_type_vars()         // {}
+    ///
+    /// // Type variables are free by default:
+    /// Var('a).free_type_vars()       // {'a'}
+    ///
+    /// // Function types collect free vars from both parts:
+    /// Func(Var('a), Int).free_type_vars()     // {'a'}
+    /// Func(Var('a), Var('b')).free_type_vars() // {'a', 'b'}
+    /// Func(Var('a), Var('a')).free_type_vars() // {'a'} (single element)
+    /// ```
     pub fn free_type_vars(&self) -> HashSet<TypeVar> {
         match self {
             Type::Int | Type::String | Type::Unit | Type::Bool => HashSet::new(),
@@ -51,6 +239,32 @@ impl Type {
         }
     }
 
+    /// Convert this type to a human-readable string representation.
+    ///
+    /// Uses Haskell-style notation with type variables prefixed with `'`.
+    ///
+    /// # Returns
+    ///
+    /// A string representation of this type
+    ///
+    /// # Examples
+    ///
+    /// ```text
+    /// Int.pretty()                    // "Int"
+    /// String.pretty()                 // "String"
+    /// Unit.pretty()                    // "Unit"
+    /// Bool.pretty()                    // "Bool"
+    ///
+    /// Var('a).pretty()               // "'a"
+    /// Var(unamed).pretty()            // "'t0" (or "'t5", etc.)
+    ///
+    /// Func(Int, String).pretty()       // "Int -> String"
+    /// Func(Int, Int).pretty()        // "Int -> Int"
+    ///
+    /// // Nested functions use parentheses for clarity:
+    /// Func(Func(Int, Int), String).pretty()  // "(Int -> Int) -> String"
+    /// Func(Int, Func(Int, String)).pretty()  // "Int -> Int -> String"
+    /// ```
     pub fn pretty(&self) -> String {
         match self {
             Type::Int => "Int".to_string(),
@@ -82,6 +296,56 @@ impl fmt::Display for Type {
     }
 }
 
+/// Polymorphic type scheme.
+///
+/// Type schemes represent polymorphic types by quantifying (binding)
+/// type variables. A type scheme like `forall 'a. 'a -> 'a` means
+/// "for all types 'a, this is a function from 'a to 'a".
+///
+/// # Fields
+///
+/// * `vars` - List of quantified type variables (these are bound)
+/// * `ty` - The underlying type with potentially free variables
+///
+/// # Semantics
+///
+/// The `vars` list specifies which type variables are quantified (bound).
+/// These bound variables can be instantiated with fresh type variables when
+/// the type scheme is **used**, but they are not considered free when
+/// the type scheme is **defined**.
+///
+/// # Example: Identity Function
+///
+/// ```text
+/// // Type scheme for identity function:
+/// // forall 'a. 'a -> 'a
+/// TypeScheme {
+///     vars: [TypeVar { id: 0, name: Some("a") }],
+///     ty: Func(Var(0), Var(0)),
+/// }
+///
+/// // When used with integers:
+/// // Instantiate 'a with Int → Int -> Int
+///
+/// // When used with strings:
+/// // Instantiate 'a with String → String -> String
+///
+/// // When used with function:
+/// // Instantiate 'a with Int->Int → (Int->Int) -> (Int->Int)
+/// ```
+///
+/// # Monomorphic vs Polymorphic
+///
+/// - **Monomorphic**: No quantified variables, concrete type
+/// - **Polymorphic**: Has quantified variables, can be instantiated
+///
+/// ```text
+/// // Monomorphic:
+/// TypeScheme { vars: [], ty: Int }
+///
+/// // Polymorphic:
+/// TypeScheme { vars: ['a'], ty: Func(Var('a), Var('a)) }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeScheme {
     pub vars: Vec<TypeVar>,
@@ -89,6 +353,24 @@ pub struct TypeScheme {
 }
 
 impl TypeScheme {
+    /// Create a monomorphic type scheme (no type variables).
+    ///
+    /// Use this for concrete types that cannot be instantiated.
+    ///
+    /// # Arguments
+    ///
+    /// * `ty` - The concrete type
+    ///
+    /// # Returns
+    ///
+    /// A type scheme with no quantified variables
+    ///
+    /// # Example
+    ///
+    /// ```text
+    /// TypeScheme::monomorphic(Int)
+    /// // Equivalent to: TypeScheme { vars: [], ty: Int }
+    /// ```
     pub fn monomorphic(ty: Type) -> Self {
         TypeScheme {
             vars: Vec::new(),
@@ -96,6 +378,26 @@ impl TypeScheme {
         }
     }
 
+    /// Create a polymorphic type scheme with quantified variables.
+    ///
+    /// Use this for polymorphic types that can be instantiated.
+    ///
+    /// # Arguments
+    ///
+    /// * `vars` - List of quantified type variables
+    /// * `ty` - The type with potentially free variables
+    ///
+    /// # Returns
+    ///
+    /// A type scheme with the given variables quantified
+    ///
+    /// # Example
+    ///
+    /// ```text
+    /// let a = TypeVar::new(0);
+    /// TypeScheme::polymorphic(vec![a.clone()], Type::func(Type::Var(a), Type::Var(a)))
+    /// // Equivalent to: forall 'a. 'a -> 'a
+    /// ```
     pub fn polymorphic(vars: Vec<TypeVar>, ty: Type) -> Self {
         TypeScheme { vars, ty }
     }
