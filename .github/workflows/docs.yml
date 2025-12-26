@@ -21,6 +21,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
       - name: Build documentation
         run: cargo doc --no-deps --workspace
       - name: Add redirect index
