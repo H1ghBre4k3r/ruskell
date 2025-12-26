@@ -2,8 +2,6 @@ name: CI Checks
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 on:
   push:
@@ -118,5 +116,9 @@ jobs:
       - linting
       - formatting
     if: github.ref == 'refs/heads/main'
+    permissions:
+      pages: write
+      id-token: write
+      contents: read
     uses: ./.github/workflows/docs.yml
     secrets: inherit
