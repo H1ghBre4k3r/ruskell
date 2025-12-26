@@ -2,6 +2,8 @@ name: CI Checks
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
 
 on:
   push:
@@ -107,3 +109,14 @@ jobs:
           toolchain: stable
           components: rustfmt
       - run: cargo fmt -- --check
+  
+  deploy-docs:
+    name: Deploy Documentation
+    needs:
+      - building
+      - testing
+      - linting
+      - formatting
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/docs.yml
+    secrets: inherit
