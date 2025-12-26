@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🦀 Ruskell
+# Ruskell
 
 **A Haskell-inspired programming language implemented in Rust**
 
@@ -14,24 +14,30 @@
 
 ---
 
-## ✨ Overview
+## Overview
 
 Ruskell is a small, experimental functional programming language that takes inspiration from Haskell's elegant syntax while being built entirely in Rust. It features a custom lexer and parser, along with a tree-walking interpreter for program execution.
 
-> 🚧 **Note:** This project is in early development and is intended for learning and experimentation.
+> **Note:** This project is in early development and is intended for learning and experimentation.
 
-## 🎯 Features
+## Features
 
 | Feature | Description |
 |---------|-------------|
-| 📝 **Haskell-like Syntax** | Clean, functional-style function definitions |
-| 🔄 **Do-block Expressions** | Sequential execution with `do...end` blocks |
-| 📦 **Local Bindings** | Variable assignment with `:=` operator |
-| 🧱 **Basic Types** | Integers, strings, and unit values |
-| 🔍 **Lexical Scoping** | Proper scoped evaluation for variables and functions |
-| ⚡ **Tree-walking Interpreter** | Direct AST evaluation for simplicity |
+| **Haskell-like Syntax** | Clean, functional-style function definitions |
+| **Do-block Expressions** | Sequential execution with `do...end` blocks |
+| **Local Bindings** | Variable assignment with `:=` operator |
+| **Lambda Expressions** | Multi-parameter lambdas with automatic currying |
+| **Lexical Closures** | Proper environment capture for nested functions |
+| **Arithmetic Operators** | `+`, `-`, `*`, `/` with proper precedence |
+| **Type Inference** | Full Hindley-Milner type system with let-polymorphism |
+| **Type Safety** | Compile-time type checking catches errors early |
+| **Pattern Matching** | Match expressions with pattern destructuring |
+| **Lambda Lifting** | Automatic closure conversion for optimization |
+| **Basic Types** | Integers, strings, and unit values |
+| **Tree-walking Interpreter** | Direct AST evaluation for simplicity |
 
-## 📖 Language Syntax
+## Language Syntax
 
 ### Function Definition
 
@@ -58,20 +64,37 @@ end
 
 ```haskell
 main = do
-    foo
-end
-
-foo = do 
-    bar := baz
-    bar
-end
-
-baz = do 
-    42
+    -- Define a closure that captures x
+    makeAdder := \x => do
+        \y => x + y
+    end
+    
+    -- Create specialized functions
+    add10 := makeAdder(10)
+    add20 := makeAdder(20)
+    
+    -- Use them
+    result1 := add10(5)   -- 15
+    result2 := add20(5)   -- 25
+    
+    -- Arithmetic with precedence
+    calculation := (result1 + result2) * 2 - 10
+    
+    calculation
 end
 ```
 
-## 🚀 Getting Started
+**Output:**
+```
+Type checking...
+✓ Type checking passed!
+  main : Unit -> Int
+
+Running program...
+```
+Exit code: 70
+
+## Getting Started
 
 ### Prerequisites
 
@@ -87,11 +110,13 @@ cd ruskell
 # Build the project
 cargo build --release
 
-# Run
+# Run the interpreter (rsk binary)
 cargo run
+# Or after building
+./target/release/rsk
 ```
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
@@ -108,35 +133,45 @@ cargo run
 
 ### Components
 
-- **Lexer** – Tokenizes source code using the `lachs` library with derive macros
-- **Parser** – Recursive descent parser building the surface AST
-- **Desugarer** – Transforms surface AST to core AST (multi-param → single-param lambdas)
-- **Type Checker** – Hindley-Milner type inference with let-polymorphism
-- **Interpreter** – Tree-walking evaluator with scoped symbol resolution
+- **Lexer** (`src/lexer/`) – Tokenizes source code using the `lachs` library
+- **Parser** (`src/parser/`) – Recursive descent parser building the surface AST
+- **Desugarer** (`src/desugar/`) – Transforms surface AST to core AST (multi-param → single-param lambdas)
+- **Lambda Lifter** (`src/desugar/lift.rs`) – Converts closures to top-level functions
+- **Type Checker** (`src/types/`) – Hindley-Milner type inference with let-polymorphism
+- **Interpreter** (`src/interpreter/`) – Tree-walking evaluator with scoped symbol resolution
+- **Formatter** (`src/fmt/`) – Pretty-printing for both surface and core ASTs
 
-## 📦 Dependencies
+## Dependencies
 
 | Crate | Version | Purpose |
 |-------|---------|---------|
 | [anyhow](https://crates.io/crates/anyhow) | 1.0.100 | Flexible error handling |
-| [lachs](https://crates.io/crates/lachs) | 0.1.4 | Lexer generation |
-| [lachs_derive](https://crates.io/crates/lachs_derive) | 0.1.4 | Lexer derive macros |
+| [clap](https://crates.io/crates/clap) | 4.5.53 | Command-line argument parsing |
+| [lachs](https://crates.io/crates/lachs) | 0.1.4 | Lexer generation with derive macros |
 
-## 🗺️ Roadmap
+## Roadmap
 
-- [x] Function arguments/parameters
-- [x] Type system (inference complete, annotations pending)
-- [ ] Pattern matching
-- [ ] More primitive types (floats, booleans)
-- [ ] Standard library
-- [x] Better error messages
-- [ ] REPL
+**Completed:**
+- Function parameters and multi-argument calls
+- Hindley-Milner type inference (type annotations in progress)
+- Pattern matching with destructuring
+- Lambda lifting for closure optimization
+- Improved parser error reporting
 
-## 🤝 Contributing
+**In Progress:**
+- Type annotations syntax
+- Additional primitive types (floats, booleans)
+
+**Planned:**
+- Standard library with common functions
+- Interactive REPL
+- Bytecode compiler and virtual machine
+
+## Contributing
 
 Contributions are welcome! Feel free to open issues or submit pull requests.
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License – see the [LICENSE](LICENSE) file for details.
 
@@ -144,6 +179,6 @@ This project is licensed under the MIT License – see the [LICENSE](LICENSE) fi
 
 <div align="center">
 
-Made with ❤️ and 🦀
+Made with Rust
 
 </div>
