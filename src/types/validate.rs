@@ -3,7 +3,8 @@ use std::fmt;
 use lachs::Span;
 
 use super::env::TypeEnv;
-use super::infer::{Infer, TypeError};
+use super::error::TypeError;
+use super::infer::Infer;
 use super::ty::Type;
 use crate::core::CoreProgram;
 
