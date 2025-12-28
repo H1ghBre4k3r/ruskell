@@ -247,6 +247,7 @@
 //! - [`crate::interpreter`] - Runtime evaluation (runs after type checking)
 
 pub mod env;
+pub mod error;
 pub mod infer;
 pub mod subst;
 pub mod ty;

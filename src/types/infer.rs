@@ -1,121 +1,11 @@
 use std::collections::HashMap;
-use std::fmt;
-
-use lachs::Span;
 
 use super::env::TypeEnv;
+use super::error::TypeError;
 use super::subst::Substitution;
 use super::ty::{Type, TypeScheme, TypeVar};
-use super::unify::{UnifyError, unify};
+use super::unify::unify;
 use crate::core::*;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TypeError {
-    UnboundVariable {
-        name: String,
-        span: Span,
-    },
-    TypeMismatch {
-        expected: Type,
-        found: Type,
-        span: Span,
-        context: Option<String>,
-    },
-    OccursCheck {
-        var: TypeVar,
-        ty: Type,
-        span: Span,
-    },
-}
-
-impl TypeError {
-    pub fn unbound_variable(name: String, span: Span) -> Self {
-        TypeError::UnboundVariable { name, span }
-    }
-
-    pub fn type_mismatch(expected: Type, found: Type, span: Span) -> Self {
-        TypeError::TypeMismatch {
-            expected,
-            found,
-            span,
-            context: None,
-        }
-    }
-
-    pub fn with_context(mut self, context: String) -> Self {
-        if let TypeError::TypeMismatch { context: ctx, .. } = &mut self {
-            *ctx = Some(context);
-        }
-        self
-    }
-
-    pub fn occurs_check(var: TypeVar, ty: Type, span: Span) -> Self {
-        TypeError::OccursCheck { var, ty, span }
-    }
-
-    pub fn from_unify_error(err: UnifyError, span: Span) -> Self {
-        match err {
-            UnifyError::Mismatch { expected, found } => {
-                TypeError::type_mismatch(expected, found, span)
-            }
-            UnifyError::OccursCheck { var, ty } => TypeError::occurs_check(var, ty, span),
-        }
-    }
-}
-
-impl fmt::Display for TypeError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            TypeError::UnboundVariable { name, span } => {
-                let msg = format!("unbound variable: {}", name);
-                // Check if span has source attached
-                if span.source.is_empty() {
-                    write!(f, "Type error: {}", msg)
-                } else {
-                    write!(f, "{}", span.to_string(&msg))
-                }
-            }
-            TypeError::TypeMismatch {
-                expected,
-                found,
-                span,
-                context,
-            } => {
-                let msg = format!(
-                    "type mismatch: expected {}, found {}",
-                    expected.pretty(),
-                    found.pretty()
-                );
-                let full_msg = if let Some(ctx) = context {
-                    format!("{}\n  Note: {}", msg, ctx)
-                } else {
-                    msg
-                };
-                // Check if span has source attached
-                if span.source.is_empty() {
-                    write!(f, "Type error: {}", full_msg)
-                } else {
-                    write!(f, "{}", span.to_string(&full_msg))
-                }
-            }
-            TypeError::OccursCheck { var, ty, span } => {
-                let msg = format!(
-                    "cannot construct infinite type: {} = {}",
-                    Type::Var(var.clone()).pretty(),
-                    ty.pretty()
-                );
-                // Check if span has source attached
-                if span.source.is_empty() {
-                    write!(f, "Type error: {}", msg)
-                } else {
-                    write!(f, "{}", span.to_string(&msg))
-                }
-            }
-        }
-    }
-}
-
-impl std::error::Error for TypeError {}
 
 /// Type inference context.
 ///
@@ -681,6 +571,7 @@ impl Default for Infer {
 mod tests {
     use super::*;
     use crate::ast::expression::{BinOpKind, UnaryOpKind};
+    use lachs::Span;
 
     // Helper to create test expressions
     fn unit_expr() -> CoreExpr<()> {
