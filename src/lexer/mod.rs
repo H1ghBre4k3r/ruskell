@@ -35,8 +35,10 @@
 //!
 //! ### Punctuation
 //! - Parentheses: `(`, `)`
+//! - Brackets: `[`, `]`
 //! - Comma: `,`
 //! - Colon: `:`
+//! - Pipe: `|`
 //!
 //! ## Usage
 //!
@@ -135,6 +137,12 @@ pub enum Token {
     LogicalOr,
     #[terminal("!")]
     LogicalNot,
+    #[terminal("[")]
+    LBracket,
+    #[terminal("]")]
+    RBracket,
+    #[terminal("|")]
+    Pipe,
 }
 
 impl Token {
@@ -182,6 +190,9 @@ impl Token {
             Token::LogicalAnd(inner) => inner.position.clone(),
             Token::LogicalOr(inner) => inner.position.clone(),
             Token::LogicalNot(inner) => inner.position.clone(),
+            Token::LBracket(inner) => inner.position.clone(),
+            Token::RBracket(inner) => inner.position.clone(),
+            Token::Pipe(inner) => inner.position.clone(),
         }
     }
 
@@ -240,6 +251,9 @@ impl Token {
             Token::LogicalAnd(_) => "'&&'".to_string(),
             Token::LogicalOr(_) => "'||'".to_string(),
             Token::LogicalNot(_) => "'!'".to_string(),
+            Token::LBracket(_) => "'['".to_string(),
+            Token::RBracket(_) => "']'".to_string(),
+            Token::Pipe(_) => "'|'".to_string(),
         }
     }
 }

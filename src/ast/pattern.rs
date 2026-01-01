@@ -74,6 +74,7 @@ use super::expression::{Expression, Ident, LambdaBody};
 /// * `Literal` - Match a specific literal value (e.g., `42`, `"hello"`)
 /// * `Ident` - Bind a variable to the matched value (e.g., `x`, `name`)
 /// * `Wildcard` - Match any value without binding (e.g., `_`)
+/// * `ListCons` - Match non-empty list with head and tail (e.g., `[x | xs]`)
 ///
 /// # Examples
 ///
@@ -89,12 +90,21 @@ use super::expression::{Expression, Ident, LambdaBody};
 /// // Wildcard (match anything):
 /// // match x of _ => ...
 /// Pattern::Wildcard(Wildcard { ... })
+///
+/// // List cons pattern:
+/// // match xs of [x | rest] => ...
+/// Pattern::ListCons(ListConsPattern {
+///     head: Box::new(Pattern::Ident("x")),
+///     tail: Box::new(Pattern::Ident("rest")),
+///     ...
+/// })
 /// ```
 #[derive(Debug, Clone)]
 pub enum Pattern<T> {
     Literal(LiteralPattern<T>),
     Ident(Ident<T>),
     Wildcard(Wildcard<T>),
+    ListCons(ListConsPattern<T>),
 }
 
 /// Literal pattern - matches a specific value.
@@ -108,6 +118,7 @@ pub enum Pattern<T> {
 /// * `String` - Match a specific string (e.g., `"hello"`)
 /// * `Boolean` - Match `true` or `false`
 /// * `Unit` - Match the unit value `()`
+/// * `EmptyList` - Match the empty list `[]`
 ///
 /// # Examples
 ///
@@ -118,6 +129,7 @@ pub enum Pattern<T> {
 /// //     "yes" => "affirmative"
 /// //     true   => "correct"
 /// //     ()     => "nothing"
+/// //     []    => "empty"
 /// //     _     => "other"
 /// // end
 /// LiteralPattern::Integer(0, ...)     // Matches 0
@@ -125,6 +137,7 @@ pub enum Pattern<T> {
 /// LiteralPattern::String("yes", ...)   // Matches "yes"
 /// LiteralPattern::Boolean(true, ...)  // Matches true
 /// LiteralPattern::Unit(...)            // Matches ()
+/// LiteralPattern::EmptyList(...)       // Matches []
 /// ```
 #[derive(Debug, Clone)]
 pub enum LiteralPattern<T> {
@@ -132,6 +145,7 @@ pub enum LiteralPattern<T> {
     String(String, Span, T),
     Boolean(bool, Span, T),
     Unit(Span, T),
+    EmptyList(Span, T),
 }
 
 /// Wildcard pattern.
@@ -156,6 +170,68 @@ pub enum LiteralPattern<T> {
 /// ```
 #[derive(Debug, Clone)]
 pub struct Wildcard<T> {
+    pub position: Span,
+    pub info: T,
+}
+
+/// List cons pattern.
+///
+/// Matches non-empty lists by destructuring into head (first element)
+/// and tail (rest of the list). Similar to Haskell's `(x:xs)` pattern.
+///
+/// # Fields
+///
+/// * `head` - Pattern to match the first element
+/// * `tail` - Pattern to match the rest of the list
+/// * `position` - Source location
+/// * `info` - Metadata (currently unused)
+///
+/// # Examples
+///
+/// ```text
+/// // match xs of
+/// //     [x | rest] => ...    // Bind first element to x, rest to rest
+/// //     [h | _]    => ...    // Bind first element to h, ignore rest
+/// //     [_ | t]    => ...    // Ignore first element, bind rest to t
+/// // end
+///
+/// ListConsPattern {
+///     head: Box::new(Pattern::Ident(Ident("x"))),
+///     tail: Box::new(Pattern::Ident(Ident("rest"))),
+///     position: ...,
+///     info: (),
+/// }
+/// ```
+///
+/// # Semantics
+///
+/// The cons pattern `[h | t]` matches a list if and only if:
+/// 1. The list is non-empty (has at least one element)
+/// 2. The head pattern `h` matches the first element
+/// 3. The tail pattern `t` matches the rest of the list
+///
+/// # Example: Sum Function
+///
+/// ```text
+/// // sum []      = 0
+/// // sum [x|xs]  = x + sum(xs)
+///
+/// FunctionClause {
+///     patterns: [
+///         ListConsPattern {
+///             head: Pattern::Ident("x"),
+///             tail: Pattern::Ident("xs"),
+///             ...
+///         }
+///     ],
+///     body: BinaryOp(Add, "x", "sum(xs)"),
+///     ...
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct ListConsPattern<T> {
+    pub head: Box<Pattern<T>>,
+    pub tail: Box<Pattern<T>>,
     pub position: Span,
     pub info: T,
 }

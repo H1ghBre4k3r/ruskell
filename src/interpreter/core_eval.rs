@@ -168,6 +168,10 @@ where
                 info: string.info.clone(),
             }),
             CoreExpr::Boolean(boolean) => RValue::Bool(boolean.value),
+            CoreExpr::List(list) => {
+                let elements = list.elements.iter().map(|e| e.eval(scope)).collect();
+                RValue::List(elements)
+            }
             CoreExpr::Lambda(lambda) => {
                 // Capture the current environment for the closure
                 let captured = scope.capture();
@@ -190,6 +194,25 @@ where
                                     RValue::Integer(i) => println!("{}", i.value),
                                     RValue::String(s) => println!("{}", s.value), // Print without quotes
                                     RValue::Bool(b) => println!("{}", b),
+                                    RValue::List(elements) => {
+                                        print!("[");
+                                        for (i, elem) in elements.iter().enumerate() {
+                                            if i > 0 {
+                                                print!(", ");
+                                            }
+                                            match elem {
+                                                RValue::Unit => print!("()"),
+                                                RValue::Integer(int) => print!("{}", int.value),
+                                                RValue::String(s) => print!("\"{}\"", s.value),
+                                                RValue::Bool(b) => print!("{}", b),
+                                                RValue::List(_) => print!("<list>"),
+                                                RValue::CoreLambda(_, _) => print!("<function>"),
+                                                RValue::Lambda(_) => print!("<function>"),
+                                                RValue::Builtin(_) => print!("<builtin>"),
+                                            }
+                                        }
+                                        println!("]");
+                                    }
                                     RValue::CoreLambda(_, _) => println!("<function>"),
                                     RValue::Lambda(_) => println!("<function>"),
                                     RValue::Builtin(_) => println!("<builtin>"),
@@ -203,6 +226,29 @@ where
                                     RValue::Integer(i) => i.value.to_string(),
                                     RValue::String(s) => s.value.clone(),
                                     RValue::Bool(b) => b.to_string(),
+                                    RValue::List(elements) => {
+                                        let mut result = "[".to_string();
+                                        for (i, elem) in elements.iter().enumerate() {
+                                            if i > 0 {
+                                                result.push_str(", ");
+                                            }
+                                            let elem_str = match elem {
+                                                RValue::Unit => "()".to_string(),
+                                                RValue::Integer(int) => int.value.to_string(),
+                                                RValue::String(s) => format!("\"{}\"", s.value),
+                                                RValue::Bool(b) => b.to_string(),
+                                                RValue::List(_) => "<list>".to_string(),
+                                                RValue::CoreLambda(_, _) => {
+                                                    "<function>".to_string()
+                                                }
+                                                RValue::Lambda(_) => "<function>".to_string(),
+                                                RValue::Builtin(_) => "<builtin>".to_string(),
+                                            };
+                                            result.push_str(&elem_str);
+                                        }
+                                        result.push(']');
+                                        result
+                                    }
                                     RValue::CoreLambda(_, _) => "<function>".to_string(),
                                     RValue::Lambda(_) => "<function>".to_string(),
                                     RValue::Builtin(_) => "<builtin>".to_string(),

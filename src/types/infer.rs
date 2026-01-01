@@ -170,6 +170,8 @@ impl Infer {
 
             CoreExpr::Boolean(_) => Ok((Substitution::empty(), Type::Bool)),
 
+            CoreExpr::List(list) => self.infer_list(env, list),
+
             CoreExpr::Ident(ident) => match env.lookup(&ident.value) {
                 Some(scheme) => {
                     let ty = self.instantiate(scheme);
@@ -409,6 +411,46 @@ impl Infer {
         let result_ty = s9.apply(&then_ty_subst);
 
         Ok((s9, result_ty))
+    }
+
+    fn infer_list(
+        &mut self,
+        env: &TypeEnv,
+        list: &CoreList<()>,
+    ) -> Result<(Substitution, Type), TypeError> {
+        // Empty list gets a fresh type variable for the element type
+        if list.elements.is_empty() {
+            let elem_ty = Type::Var(self.fresh_var());
+            return Ok((Substitution::empty(), Type::List(Box::new(elem_ty))));
+        }
+
+        // Infer type of first element
+        let (s1, first_ty) = self.infer_expr(env, &list.elements[0])?;
+        let mut subst = s1;
+        let mut elem_ty = first_ty;
+
+        // For each remaining element, infer its type and unify with element type
+        for (i, elem_expr) in list.elements.iter().enumerate().skip(1) {
+            let env_subst = env.apply_subst(&subst);
+            let (s_elem, elem_expr_ty) = self.infer_expr(&env_subst, elem_expr)?;
+
+            // Apply current substitution to element type
+            let elem_ty_subst = s_elem.apply(&elem_ty);
+
+            // Unify with this element's type
+            let s_unify = unify(&elem_ty_subst, &elem_expr_ty).map_err(|e| {
+                TypeError::from_unify_error(e, elem_expr.position()).with_context(format!(
+                    "list element {} must have same type as other elements",
+                    i + 1
+                ))
+            })?;
+
+            // Compose substitutions
+            subst = s_unify.compose(&s_elem).compose(&subst);
+            elem_ty = subst.apply(&elem_ty);
+        }
+
+        Ok((subst, Type::List(Box::new(elem_ty))))
     }
 
     fn infer_statement(

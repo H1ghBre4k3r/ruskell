@@ -385,6 +385,11 @@ fn build_clause_condition_and_bindings(
                         position: pos.clone(),
                         info: (),
                     }),
+                    ast::pattern::LiteralPattern::EmptyList(pos, _) => CoreExpr::List(CoreList {
+                        elements: vec![],
+                        position: pos.clone(),
+                        info: (),
+                    }),
                 };
 
                 conditions.push(CoreExpr::BinaryOp(CoreBinaryOp {
@@ -401,6 +406,11 @@ fn build_clause_condition_and_bindings(
             }
             ast::pattern::Pattern::Wildcard(_) => {
                 // Wildcard: no condition, no binding
+            }
+            ast::pattern::Pattern::ListCons(_) => {
+                // TODO: List cons pattern requires builtin list operations
+                // For now, panic to let user know it's not implemented yet
+                panic!("List cons patterns ([x | xs]) are not yet implemented");
             }
         }
     }
@@ -668,6 +678,11 @@ fn desugar_expr(expr: ast::expression::Expression<()>) -> CoreExpr<()> {
             position: b.position,
             info: (),
         }),
+        Expression::List(l) => CoreExpr::List(CoreList {
+            elements: l.elements.into_iter().map(desugar_expr).collect(),
+            position: l.position,
+            info: (),
+        }),
         Expression::Lambda(lambda) => CoreExpr::Lambda(desugar_lambda(lambda)),
         Expression::FunctionCall(call) => desugar_function_call(call),
         Expression::BinaryOp(binop) => CoreExpr::BinaryOp(CoreBinaryOp {
@@ -771,6 +786,11 @@ fn desugar_match_arm(
                 info: (),
             })
         }
+
+        // List cons pattern - not yet implemented
+        Pattern::ListCons(_) => {
+            panic!("List cons patterns ([x | xs]) are not yet implemented in match expressions");
+        }
     }
 }
 
@@ -800,6 +820,11 @@ fn create_equality_check(
             info: (),
         }),
         LiteralPattern::Unit(pos, _) => CoreExpr::Unit(CoreUnit {
+            position: pos,
+            info: (),
+        }),
+        LiteralPattern::EmptyList(pos, _) => CoreExpr::List(CoreList {
+            elements: vec![],
             position: pos,
             info: (),
         }),

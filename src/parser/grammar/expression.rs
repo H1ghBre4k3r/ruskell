@@ -2,14 +2,14 @@
 
 use crate::ast::expression::{
     BinOpKind, BinaryOp, Expression, FunctionCall, IfThenElse, Lambda, LambdaBody, LambdaParam,
-    UnaryOp, UnaryOpKind, Unit,
+    List, UnaryOp, UnaryOpKind, Unit,
 };
 use crate::lexer::Token;
 
 use crate::parser::combinators::{
     BoxedParser, expect_arrow, expect_backslash, expect_comma, expect_do, expect_else, expect_end,
-    expect_if, expect_logical_and, expect_logical_not, expect_logical_or, expect_lparen,
-    expect_rparen, expect_then, many, optional,
+    expect_if, expect_lbracket, expect_logical_and, expect_logical_not, expect_logical_or,
+    expect_lparen, expect_pipe, expect_rbracket, expect_rparen, expect_then, many, optional,
 };
 use crate::parser::state::{ParseState, Parser};
 
@@ -19,6 +19,53 @@ use super::statement::statement;
 /// unit_literal := "()"
 pub fn unit_literal() -> BoxedParser<Expression<()>> {
     unit() >> |u| Expression::Unit(u)
+}
+
+/// list_literal := "[" (expression ("," expression)*)? "]"
+pub fn list_literal() -> BoxedParser<Expression<()>> {
+    BoxedParser::new(move |state: &mut ParseState| {
+        let start = expect_lbracket().parse(state)?.pos();
+
+        // Check for empty list
+        let pos = state.position();
+        if let Ok(end) = expect_rbracket().parse(state) {
+            return Ok(Expression::List(List {
+                elements: vec![],
+                position: start.merge(&end.pos()),
+                info: (),
+            }));
+        }
+        state.restore(pos);
+
+        // Parse first element
+        let first = expression().parse(state)?;
+        let mut elements = vec![first];
+
+        // Parse remaining elements (comma-separated)
+        loop {
+            let pos = state.position();
+            if expect_comma().parse(state).is_err() {
+                state.restore(pos);
+                break;
+            }
+
+            match expression().parse(state) {
+                Ok(expr) => elements.push(expr),
+                Err(_) => {
+                    state.restore(pos);
+                    break;
+                }
+            }
+        }
+
+        let end = expect_rbracket().parse(state)?.pos();
+
+        Ok(Expression::List(List {
+            elements,
+            position: start.merge(&end),
+            info: (),
+        }))
+    })
 }
 
 /// singular := unit_literal | boolean | ident | integer | string
@@ -286,10 +333,12 @@ fn pattern_position(pattern: &crate::ast::pattern::Pattern<()>) -> lachs::Span {
                 LiteralPattern::String(_, span, _) => span.clone(),
                 LiteralPattern::Boolean(_, span, _) => span.clone(),
                 LiteralPattern::Unit(span, _) => span.clone(),
+                LiteralPattern::EmptyList(span, _) => span.clone(),
             }
         }
         Pattern::Ident(id) => id.position.clone(),
         Pattern::Wildcard(w) => w.position.clone(),
+        Pattern::ListCons(cons) => cons.position.clone(),
     }
 }
 
@@ -347,6 +396,7 @@ fn comparison_expr() -> BoxedParser<Expression<()>> {
             Expression::Lambda(l) => l.position.clone(),
             Expression::String(s) => s.position.clone(),
             Expression::Unit(u) => u.position.clone(),
+            Expression::List(l) => l.position.clone(),
             Expression::UnaryOp(u) => u.position.clone(),
             Expression::IfThenElse(i) => i.position.clone(),
             Expression::Match(m) => m.position.clone(),
@@ -518,13 +568,19 @@ fn do_block_expr() -> BoxedParser<Expression<()>> {
     })
 }
 
-/// primary := do_block | function_call | singular | "(" expression ")"
+/// primary := do_block | function_call | singular | "(" expression ")" | list
 fn primary_expr() -> BoxedParser<Expression<()>> {
     BoxedParser::new(move |state: &mut ParseState| {
         let pos = state.position();
 
         // Try do-block expression
         if let Ok(expr) = do_block_expr().parse(state) {
+            return Ok(expr);
+        }
+        state.restore(pos);
+
+        // Try list literal
+        if let Ok(expr) = list_literal().parse(state) {
             return Ok(expr);
         }
         state.restore(pos);
@@ -597,6 +653,7 @@ fn multiplicative_expr() -> BoxedParser<Expression<()>> {
                 Expression::Lambda(l) => l.position.clone(),
                 Expression::String(s) => s.position.clone(),
                 Expression::Unit(u) => u.position.clone(),
+                Expression::List(lst) => lst.position.clone(),
                 Expression::UnaryOp(u) => u.position.clone(),
                 Expression::IfThenElse(i) => i.position.clone(),
                 Expression::Match(m) => m.position.clone(),
@@ -657,6 +714,7 @@ fn additive_expr() -> BoxedParser<Expression<()>> {
                 Expression::Lambda(l) => l.position.clone(),
                 Expression::String(s) => s.position.clone(),
                 Expression::Unit(u) => u.position.clone(),
+                Expression::List(lst) => lst.position.clone(),
                 Expression::UnaryOp(u) => u.position.clone(),
                 Expression::IfThenElse(i) => i.position.clone(),
                 Expression::Match(m) => m.position.clone(),
@@ -683,6 +741,7 @@ fn expr_position(expr: &Expression<()>) -> lachs::Span {
         Expression::Integer(i) => i.position.clone(),
         Expression::String(s) => s.position.clone(),
         Expression::Boolean(b) => b.position.clone(),
+        Expression::List(l) => l.position.clone(),
         Expression::FunctionCall(f) => f.position.clone(),
         Expression::Lambda(l) => l.position.clone(),
         Expression::BinaryOp(b) => b.position.clone(),

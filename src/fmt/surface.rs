@@ -151,8 +151,16 @@ fn format_pattern<T>(pattern: &Pattern<T>, fmt: &mut Formatter) {
                 fmt.write_str(if *val { "true" } else { "false" })
             }
             LiteralPattern::Unit(_, _) => fmt.write_str("()"),
+            LiteralPattern::EmptyList(_, _) => fmt.write_str("[]"),
         },
         Pattern::Wildcard(_) => fmt.write_str("_"),
+        Pattern::ListCons(cons) => {
+            fmt.write_str("[");
+            format_pattern(&cons.head, fmt);
+            fmt.write_str(" | ");
+            format_pattern(&cons.tail, fmt);
+            fmt.write_str("]");
+        }
     }
 }
 
@@ -163,6 +171,16 @@ fn format_expression<T>(expr: &Expression<T>, fmt: &mut Formatter, precedence: u
         Expression::Integer(int) => write!(fmt.buffer, "{}", int.value).unwrap(),
         Expression::String(s) => write!(fmt.buffer, "\"{}\"", s.value).unwrap(),
         Expression::Boolean(b) => fmt.write_str(if b.value { "true" } else { "false" }),
+        Expression::List(list) => {
+            fmt.write_str("[");
+            for (i, elem) in list.elements.iter().enumerate() {
+                if i > 0 {
+                    fmt.write_str(", ");
+                }
+                format_expression(elem, fmt, 0);
+            }
+            fmt.write_str("]");
+        }
         Expression::FunctionCall(call) => format_function_call(call, fmt),
         Expression::Lambda(lambda) => format_lambda_expression(lambda, fmt),
         Expression::BinaryOp(binop) => format_binary_op(binop, fmt, precedence),

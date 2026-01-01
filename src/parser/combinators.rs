@@ -209,6 +209,18 @@ pub fn expect_rparen() -> BoxedParser<Token> {
     token_with_error(|t| matches!(t, Token::RParen(_)), "')'")
 }
 
+pub fn expect_lbracket() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::LBracket(_)), "'['")
+}
+
+pub fn expect_rbracket() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::RBracket(_)), "']'")
+}
+
+pub fn expect_pipe() -> BoxedParser<Token> {
+    token_with_error(|t| matches!(t, Token::Pipe(_)), "'|'")
+}
+
 pub fn expect_true() -> BoxedParser<Token> {
     token_with_error(|t| matches!(t, Token::True(_)), "'true'")
 }
