@@ -531,6 +531,53 @@ impl Infer {
             TypeScheme::polymorphic(vec![type_var], to_string_type),
         );
 
+        // Add listIsEmpty: forall a. List a -> Bool
+        let type_var = self.fresh_var();
+        let is_empty_type = Type::func(
+            Type::List(Box::new(Type::Var(type_var.clone()))),
+            Type::Bool,
+        );
+        env = env.extend(
+            "listIsEmpty".to_string(),
+            TypeScheme::polymorphic(vec![type_var], is_empty_type),
+        );
+
+        // Add listHead: forall a. List a -> a
+        let type_var = self.fresh_var();
+        let head_type = Type::func(
+            Type::List(Box::new(Type::Var(type_var.clone()))),
+            Type::Var(type_var.clone()),
+        );
+        env = env.extend(
+            "listHead".to_string(),
+            TypeScheme::polymorphic(vec![type_var], head_type),
+        );
+
+        // Add listTail: forall a. List a -> List a
+        let type_var = self.fresh_var();
+        let tail_type = Type::func(
+            Type::List(Box::new(Type::Var(type_var.clone()))),
+            Type::List(Box::new(Type::Var(type_var.clone()))),
+        );
+        env = env.extend(
+            "listTail".to_string(),
+            TypeScheme::polymorphic(vec![type_var], tail_type),
+        );
+
+        // Add listCons: forall a. a -> List a -> List a
+        let type_var = self.fresh_var();
+        let cons_type = Type::func(
+            Type::Var(type_var.clone()),
+            Type::func(
+                Type::List(Box::new(Type::Var(type_var.clone()))),
+                Type::List(Box::new(Type::Var(type_var.clone()))),
+            ),
+        );
+        env = env.extend(
+            "listCons".to_string(),
+            TypeScheme::polymorphic(vec![type_var], cons_type),
+        );
+
         let mut errors = Vec::new();
 
         // Pass 1: Add all functions with fresh type variables (enables recursion)

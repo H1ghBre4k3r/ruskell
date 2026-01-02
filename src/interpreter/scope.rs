@@ -24,6 +24,13 @@ where
         // Add builtins
         global_frame.insert("print".to_string(), RValue::Builtin(Builtin::Print));
         global_frame.insert("toString".to_string(), RValue::Builtin(Builtin::ToString));
+        global_frame.insert(
+            "listIsEmpty".to_string(),
+            RValue::Builtin(Builtin::ListIsEmpty),
+        );
+        global_frame.insert("listHead".to_string(), RValue::Builtin(Builtin::ListHead));
+        global_frame.insert("listTail".to_string(), RValue::Builtin(Builtin::ListTail));
+        global_frame.insert("listCons".to_string(), RValue::Builtin(Builtin::ListCons));
 
         for func in &functions {
             global_frame.insert(

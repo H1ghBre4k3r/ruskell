@@ -107,6 +107,18 @@ pub enum Pattern<T> {
     ListCons(ListConsPattern<T>),
 }
 
+impl<T> Pattern<T> {
+    /// Get the source position of this pattern
+    pub fn position(&self) -> &Span {
+        match self {
+            Pattern::Literal(lit) => lit.position(),
+            Pattern::Ident(id) => &id.position,
+            Pattern::Wildcard(w) => &w.position,
+            Pattern::ListCons(lc) => &lc.position,
+        }
+    }
+}
+
 /// Literal pattern - matches a specific value.
 ///
 /// Literal patterns match against concrete values of various types.
@@ -146,6 +158,19 @@ pub enum LiteralPattern<T> {
     Boolean(bool, Span, T),
     Unit(Span, T),
     EmptyList(Span, T),
+}
+
+impl<T> LiteralPattern<T> {
+    /// Get the source position of this literal pattern
+    pub fn position(&self) -> &Span {
+        match self {
+            LiteralPattern::Integer(_, pos, _) => pos,
+            LiteralPattern::String(_, pos, _) => pos,
+            LiteralPattern::Boolean(_, pos, _) => pos,
+            LiteralPattern::Unit(pos, _) => pos,
+            LiteralPattern::EmptyList(pos, _) => pos,
+        }
+    }
 }
 
 /// Wildcard pattern.

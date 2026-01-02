@@ -92,6 +92,7 @@
 //! - [`crate::interpreter::scope`] - Scope management for variables
 //! - [`crate::interpreter::value`] - Runtime value representations
 
+use std::collections::HashMap;
 use std::fmt::Debug;
 
 use crate::core::*;
@@ -154,9 +155,35 @@ where
     pub fn eval(&self, scope: &mut Scope<T>) -> RValue<T> {
         match self {
             CoreExpr::Unit(_) => RValue::Unit,
-            CoreExpr::Ident(ident) => scope
-                .resolve(&ident.value)
-                .unwrap_or_else(|| panic!("undefined identifier: {}", ident.value)),
+            CoreExpr::Ident(ident) => {
+                // Special handling for cons implementation
+                if ident.value == "__CONS_IMPL__" {
+                    // This is the body of the cons lambda's second argument
+                    // At this point, scope should have:
+                    // - __cons_elem (from captured env)
+                    // - __cons_list_arg (the parameter)
+                    let elem = scope
+                        .resolve("__cons_elem")
+                        .expect("cons: missing captured element");
+                    let list_val = scope
+                        .resolve("__cons_list_arg")
+                        .expect("cons: missing list argument");
+
+                    match list_val {
+                        RValue::List(mut elements) => {
+                            // Prepend the element
+                            let mut new_list = vec![elem];
+                            new_list.append(&mut elements);
+                            RValue::List(new_list)
+                        }
+                        _ => panic!("cons: second argument must be a list, got: {:?}", list_val),
+                    }
+                } else {
+                    scope
+                        .resolve(&ident.value)
+                        .unwrap_or_else(|| panic!("undefined identifier: {}", ident.value))
+                }
+            }
             CoreExpr::Integer(integer) => RValue::Integer(crate::ast::expression::Integer {
                 value: integer.value,
                 position: integer.position.clone(),
@@ -258,6 +285,68 @@ where
                                     position: call.position.clone(),
                                     info: call.info.clone(),
                                 })
+                            }
+                            Builtin::ListIsEmpty => match arg_value {
+                                RValue::List(elements) => RValue::Bool(elements.is_empty()),
+                                _ => panic!("__list_isEmpty expects list, got: {:?}", arg_value),
+                            },
+                            Builtin::ListHead => match arg_value {
+                                RValue::List(elements) => {
+                                    if elements.is_empty() {
+                                        panic!("Runtime error: head of empty list")
+                                    } else {
+                                        elements[0].clone()
+                                    }
+                                }
+                                _ => panic!("__list_head expects list, got: {:?}", arg_value),
+                            },
+                            Builtin::ListTail => match arg_value {
+                                RValue::List(elements) => {
+                                    if elements.is_empty() {
+                                        panic!("Runtime error: tail of empty list")
+                                    } else {
+                                        RValue::List(elements[1..].to_vec())
+                                    }
+                                }
+                                _ => panic!("__list_tail expects list, got: {:?}", arg_value),
+                            },
+                            Builtin::ListCons => {
+                                // cons is curried: cons(element)(list)
+                                // Return a lambda that captures the element and prepends it
+                                use crate::core::{
+                                    CoreExpr, CoreIdent, CoreLambda, CoreLambdaBody,
+                                    CoreLambdaParam,
+                                };
+                                use crate::interpreter::value::CapturedEnv;
+
+                                // Capture the element in the closure environment
+                                let mut env = HashMap::new();
+                                env.insert("__cons_elem".to_string(), arg_value);
+
+                                // Create a lambda that takes the list and prepends the element
+                                // Body: construct new list with element at front
+                                RValue::CoreLambda(
+                                    CoreLambda {
+                                        param: CoreLambdaParam::Ident(CoreIdent {
+                                            value: "__cons_list_arg".to_string(),
+                                            position: call.position.clone(),
+                                            info: call.info.clone(),
+                                        }),
+                                        // The body will be evaluated later when the lambda is called
+                                        // For now, we create a special marker that will be handled
+                                        // in the lambda evaluation
+                                        body: CoreLambdaBody::Expression(Box::new(
+                                            CoreExpr::Ident(CoreIdent {
+                                                value: "__CONS_IMPL__".to_string(),
+                                                position: call.position.clone(),
+                                                info: call.info.clone(),
+                                            }),
+                                        )),
+                                        position: call.position.clone(),
+                                        info: call.info.clone(),
+                                    },
+                                    CapturedEnv(env),
+                                )
                             }
                         }
                     }

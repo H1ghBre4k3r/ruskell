@@ -13,6 +13,10 @@ pub struct CapturedEnv<T>(pub HashMap<String, RValue<T>>);
 pub enum Builtin {
     Print,
     ToString,
+    ListIsEmpty,
+    ListHead,
+    ListTail,
+    ListCons,
 }
 
 /// Runtime value representation

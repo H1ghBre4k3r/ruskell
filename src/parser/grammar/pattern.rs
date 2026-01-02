@@ -1,6 +1,6 @@
 //! Pattern parsers for the Ruskell language
 
-use crate::ast::pattern::{LiteralPattern, Pattern, Wildcard};
+use crate::ast::pattern::{ListConsPattern, LiteralPattern, Pattern, Wildcard};
 use crate::lexer::Token;
 use crate::parser::combinators::BoxedParser;
 use crate::parser::state::{ParseError, ParseState, Parser};
@@ -57,12 +57,18 @@ pub fn wildcard() -> BoxedParser<Wildcard<()>> {
 }
 
 /// Parse a pattern
-/// pattern := literal_pattern | wildcard | ident
+/// pattern := list_cons_pattern | literal_pattern | wildcard | ident
 pub fn pattern() -> BoxedParser<Pattern<()>> {
     BoxedParser::new(|state: &mut ParseState| {
         let pos = state.position();
 
-        // Try literal pattern first
+        // Try list cons pattern or empty list literal first
+        if let Ok(list_pat) = list_pattern().parse(state) {
+            return Ok(list_pat);
+        }
+        state.restore(pos);
+
+        // Try literal pattern
         if let Ok(lit) = literal_pattern().parse(state) {
             return Ok(Pattern::Literal(lit));
         }
@@ -77,5 +83,68 @@ pub fn pattern() -> BoxedParser<Pattern<()>> {
         // Default to identifier (binds variable)
         let id = ident().parse(state)?;
         Ok(Pattern::Ident(id))
+    })
+}
+
+/// Parse a list pattern (either cons pattern [h | t] or empty list [])
+/// list_pattern := "[" "]" | "[" pattern "|" pattern "]"
+pub fn list_pattern() -> BoxedParser<Pattern<()>> {
+    BoxedParser::new(|state: &mut ParseState| {
+        // Expect opening bracket
+        let start_pos = match state.peek() {
+            Some(Token::LBracket(tok)) => {
+                let pos = tok.position.clone();
+                state.advance();
+                pos
+            }
+            _ => return Err(ParseError::new("expected '['")),
+        };
+
+        // Check for empty list []
+        if let Some(Token::RBracket(tok)) = state.peek() {
+            let end_pos = tok.position.clone();
+            state.advance();
+            return Ok(Pattern::Literal(LiteralPattern::EmptyList(
+                start_pos.merge(&end_pos),
+                (),
+            )));
+        }
+
+        // Parse head pattern
+        let head = pattern().parse(state)?;
+
+        // Check for pipe (cons pattern) vs comma or rbracket (list literal)
+        match state.peek() {
+            Some(Token::Pipe(_)) => {
+                state.advance(); // consume |
+
+                // Parse tail pattern
+                let tail = pattern().parse(state)?;
+
+                // Expect closing bracket
+                let end_pos = match state.peek() {
+                    Some(Token::RBracket(tok)) => {
+                        let pos = tok.position.clone();
+                        state.advance();
+                        pos
+                    }
+                    _ => return Err(ParseError::new("expected ']' after tail pattern")),
+                };
+
+                Ok(Pattern::ListCons(ListConsPattern {
+                    head: Box::new(head),
+                    tail: Box::new(tail),
+                    position: start_pos.merge(&end_pos),
+                    info: (),
+                }))
+            }
+            _ => {
+                // Not a cons pattern - this is likely an error for now
+                // (we don't support list literal patterns like [1, 2, 3] yet)
+                Err(ParseError::new(
+                    "expected '|' for cons pattern or ']' for empty list",
+                ))
+            }
+        }
     })
 }
