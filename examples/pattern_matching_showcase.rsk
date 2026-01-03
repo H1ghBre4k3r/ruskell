@@ -1,0 +1,138 @@
+
+isZero 0 = true
+isZero n = false
+
+classify 0 0 = "origin"
+classify 0 y = "y-axis"
+classify x 0 = "x-axis"
+classify x y = "quadrant"
+
+priority 1 1 = "critical"
+priority 1 _ = "high"
+priority 2 _ = "medium"
+priority _ _ = "low"
+
+signOf n = case n of
+    0 => "zero"
+    _ => "nonzero"
+end
+
+describeValue x = case x of
+    0 => "zero"
+    1 => "one"
+    42 => "answer"
+    _ => "other"
+end
+
+firstParam x _ = x
+secondParam _ y = y
+ignoreAll _ _ _ = 42
+
+factorial 0 = 1
+factorial n = n * factorial(n - 1)
+
+fib 0 = 0
+fib 1 = 1
+fib n = fib(n - 1) + fib(n - 2)
+
+power base 0 = 1
+power base exp = base * power(base, exp - 1)
+
+doubleIt x = x * 2
+tripleIt x = x * 3
+addTen x = x + 10
+
+applyTwice f x = f(f(x))
+
+compose f g x = f(g(x))
+
+main = do
+    print("=== Pattern Matching Showcase ===")
+    print("")
+    
+    print("1. Multi-clause Functions with Literal Patterns:")
+    print(isZero(0))
+    print(isZero(5))
+    print(classify(0, 0))
+    print(classify(5, 0))
+    print(classify(0, 3))
+    print(classify(2, 3))
+    print(priority(1, 1))
+    print(priority(1, 5))
+    print(priority(2, 5))
+    print(priority(5, 5))
+    print("")
+    
+    print("2. Case Expressions:")
+    print(signOf(0))
+    print(signOf(42))
+    print(describeValue(0))
+    print(describeValue(1))
+    print(describeValue(42))
+    print(describeValue(99))
+    print("")
+    
+    print("3. Wildcard Patterns:")
+    print(toString(firstParam(100, 200)))
+    print(toString(secondParam(100, 200)))
+    print(toString(ignoreAll(1, 2, 3)))
+    print("")
+    
+    print("4. Recursive Pattern Matching:")
+    print(toString(factorial(5)))
+    print(toString(factorial(6)))
+    print(toString(fib(10)))
+    print(toString(power(2, 8)))
+    print("")
+    
+    print("5. Comparison and Conditional Logic:")
+    isGreater := 10 > 5
+    print(toString(isGreater))
+    
+    isEqual := 10 == 10
+    print(toString(isEqual))
+    
+    isLess := 3 < 7
+    print(toString(isLess))
+    
+    max := if 10 > 5 then 10 else 5 end
+    print(toString(max))
+    
+    min := if 10 < 5 then 10 else 5 end
+    print(toString(min))
+    print("")
+    
+    print("6. Higher-order Functions:")
+    doubled := applyTwice(doubleIt, 3)
+    print(toString(doubled))
+    
+    addTenThenDouble := compose(doubleIt, addTen)
+    result := addTenThenDouble(5)
+    print(toString(result))
+    
+    doubleThenTriple := compose(tripleIt, doubleIt)
+    result2 := doubleThenTriple(4)
+    print(toString(result2))
+    print("")
+    
+    print("7. String Concatenation:")
+    hello := "Hello"
+    world := "World"
+    greeting := hello ++ " " ++ world
+    print(greeting)
+    print("")
+    
+    print("8. Boolean Logic:")
+    andResult := true && false
+    print(toString(andResult))
+    
+    orResult := true || false
+    print(toString(orResult))
+    
+    notResult := !true
+    print(toString(notResult))
+    print("")
+    
+    print("=== All Pattern Matching Features Demonstrated! ===")
+    0
+end

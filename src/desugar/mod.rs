@@ -313,8 +313,17 @@ fn build_clause_by_clause(
 
     // Build the else branch (remaining clauses)
     let else_branch = if remaining_clauses.is_empty() {
-        // No more clauses - return unit (non-exhaustive match)
-        CoreExpr::Unit(CoreUnit {
+        // No more clauses - call __MATCH_FAILURE__ to indicate pattern match failure
+        CoreExpr::FunctionCall(CoreFunctionCall {
+            func: Box::new(CoreExpr::Ident(CoreIdent {
+                value: "__MATCH_FAILURE__".to_string(),
+                position: position.clone(),
+                info: (),
+            })),
+            arg: Box::new(CoreExpr::Unit(CoreUnit {
+                position: position.clone(),
+                info: (),
+            })),
             position: position.clone(),
             info: (),
         })
@@ -350,69 +359,13 @@ fn build_clause_condition_and_bindings(
     let mut bindings = Vec::new();
 
     for (pattern, param_name) in patterns.iter().zip(param_names.iter()) {
-        match pattern {
-            ast::pattern::Pattern::Literal(lit) => {
-                // Create equality check for literal pattern
-                let scrutinee = CoreExpr::Ident(CoreIdent {
-                    value: param_name.clone(),
-                    position: position.clone(),
-                    info: (),
-                });
+        let (pattern_conds, pattern_binds) =
+            build_clause_condition_and_bindings_single(pattern, param_name, position.clone());
 
-                let literal_expr = match lit {
-                    ast::pattern::LiteralPattern::Integer(val, pos, _) => {
-                        CoreExpr::Integer(CoreInteger {
-                            value: *val,
-                            position: pos.clone(),
-                            info: (),
-                        })
-                    }
-                    ast::pattern::LiteralPattern::String(val, pos, _) => {
-                        CoreExpr::String(CoreString {
-                            value: val.clone(),
-                            position: pos.clone(),
-                            info: (),
-                        })
-                    }
-                    ast::pattern::LiteralPattern::Boolean(val, pos, _) => {
-                        CoreExpr::Boolean(CoreBoolean {
-                            value: *val,
-                            position: pos.clone(),
-                            info: (),
-                        })
-                    }
-                    ast::pattern::LiteralPattern::Unit(pos, _) => CoreExpr::Unit(CoreUnit {
-                        position: pos.clone(),
-                        info: (),
-                    }),
-                    ast::pattern::LiteralPattern::EmptyList(pos, _) => CoreExpr::List(CoreList {
-                        elements: vec![],
-                        position: pos.clone(),
-                        info: (),
-                    }),
-                };
-
-                conditions.push(CoreExpr::BinaryOp(CoreBinaryOp {
-                    op: ast::expression::BinOpKind::Eq,
-                    left: Box::new(scrutinee),
-                    right: Box::new(literal_expr),
-                    position: position.clone(),
-                    info: (),
-                }));
-            }
-            ast::pattern::Pattern::Ident(id) => {
-                // Variable pattern: bind the parameter value to this name
-                bindings.push((id.value.clone(), param_name.clone()));
-            }
-            ast::pattern::Pattern::Wildcard(_) => {
-                // Wildcard: no condition, no binding
-            }
-            ast::pattern::Pattern::ListCons(_) => {
-                // TODO: List cons pattern requires builtin list operations
-                // For now, panic to let user know it's not implemented yet
-                panic!("List cons patterns ([x | xs]) are not yet implemented");
-            }
+        if let Some(cond) = pattern_conds {
+            conditions.push(cond);
         }
+        bindings.extend(pattern_binds);
     }
 
     // Combine all conditions with AND
@@ -440,8 +393,176 @@ fn build_clause_condition_and_bindings(
     (combined_condition, bindings)
 }
 
+/// Build condition and bindings for a single pattern
+/// Returns (optional condition, variable bindings)
+fn build_clause_condition_and_bindings_single(
+    pattern: &ast::pattern::Pattern<()>,
+    param_name: &str,
+    position: lachs::Span,
+) -> (Option<CoreExpr<()>>, Vec<(String, String)>) {
+    let mut conditions = Vec::new();
+    let mut bindings = Vec::new();
+
+    match pattern {
+        ast::pattern::Pattern::Literal(lit) => {
+            // Create equality check for literal pattern
+            let scrutinee = CoreExpr::Ident(CoreIdent {
+                value: param_name.to_string(),
+                position: position.clone(),
+                info: (),
+            });
+
+            let literal_expr = match lit {
+                ast::pattern::LiteralPattern::Integer(val, pos, _) => {
+                    CoreExpr::Integer(CoreInteger {
+                        value: *val,
+                        position: pos.clone(),
+                        info: (),
+                    })
+                }
+                ast::pattern::LiteralPattern::String(val, pos, _) => CoreExpr::String(CoreString {
+                    value: val.clone(),
+                    position: pos.clone(),
+                    info: (),
+                }),
+                ast::pattern::LiteralPattern::Boolean(val, pos, _) => {
+                    CoreExpr::Boolean(CoreBoolean {
+                        value: *val,
+                        position: pos.clone(),
+                        info: (),
+                    })
+                }
+                ast::pattern::LiteralPattern::Unit(pos, _) => CoreExpr::Unit(CoreUnit {
+                    position: pos.clone(),
+                    info: (),
+                }),
+                ast::pattern::LiteralPattern::EmptyList(pos, _) => CoreExpr::List(CoreList {
+                    elements: vec![],
+                    position: pos.clone(),
+                    info: (),
+                }),
+            };
+
+            conditions.push(CoreExpr::BinaryOp(CoreBinaryOp {
+                op: ast::expression::BinOpKind::Eq,
+                left: Box::new(scrutinee),
+                right: Box::new(literal_expr),
+                position: position.clone(),
+                info: (),
+            }));
+        }
+        ast::pattern::Pattern::Ident(id) => {
+            // Variable pattern: bind the parameter value to this name
+            bindings.push((id.value.clone(), param_name.to_string()));
+        }
+        ast::pattern::Pattern::Wildcard(_) => {
+            // Wildcard: no condition, no binding
+        }
+        ast::pattern::Pattern::ListCons(cons_pattern) => {
+            // List cons pattern: [head_pat | tail_pat]
+            // For multi-clause functions, we only support simple patterns in head/tail.
+
+            // Create the scrutinee expression
+            let scrutinee = CoreExpr::Ident(CoreIdent {
+                value: param_name.to_string(),
+                position: position.clone(),
+                info: (),
+            });
+
+            // Add condition: !listIsEmpty(param)
+            let is_empty_call = CoreExpr::FunctionCall(CoreFunctionCall {
+                func: Box::new(CoreExpr::Ident(CoreIdent {
+                    value: "listIsEmpty".to_string(),
+                    position: position.clone(),
+                    info: (),
+                })),
+                arg: Box::new(scrutinee),
+                position: position.clone(),
+                info: (),
+            });
+
+            let not_empty = CoreExpr::UnaryOp(CoreUnaryOp {
+                op: ast::expression::UnaryOpKind::Not,
+                operand: Box::new(is_empty_call),
+                position: position.clone(),
+                info: (),
+            });
+
+            conditions.push(not_empty);
+
+            // Check if head and tail are simple patterns
+            fn is_simple_pattern(pat: &ast::pattern::Pattern<()>) -> bool {
+                matches!(
+                    pat,
+                    ast::pattern::Pattern::Ident(_) | ast::pattern::Pattern::Wildcard(_)
+                )
+            }
+
+            if !is_simple_pattern(&cons_pattern.head) || !is_simple_pattern(&cons_pattern.tail) {
+                panic!(
+                    "Multi-clause functions only support simple patterns (identifiers/wildcards) in list cons head/tail.\n\
+                         For complex patterns like [1 | xs] or [[x | xs] | rest], use a case expression instead:\n\
+                         \n\
+                         Example:\n\
+                         foo xs = case xs of\n\
+                             [1 | rest] => ...\n\
+                             _ => ...\n\
+                         end"
+                );
+            }
+
+            // Process head pattern - bind directly to listHead extraction
+            match &*cons_pattern.head {
+                ast::pattern::Pattern::Ident(id) => {
+                    bindings.push((id.value.clone(), format!("__LIST_HEAD__:{}", param_name)));
+                }
+                ast::pattern::Pattern::Wildcard(_) => {
+                    // No binding needed
+                }
+                _ => unreachable!("Already checked for simple patterns"),
+            }
+
+            // Process tail pattern - bind directly to listTail extraction
+            match &*cons_pattern.tail {
+                ast::pattern::Pattern::Ident(id) => {
+                    bindings.push((id.value.clone(), format!("__LIST_TAIL__:{}", param_name)));
+                }
+                ast::pattern::Pattern::Wildcard(_) => {
+                    // No binding needed
+                }
+                _ => unreachable!("Already checked for simple patterns"),
+            }
+        }
+    }
+
+    // Combine all conditions with AND (for the single pattern)
+    let combined_condition = if conditions.is_empty() {
+        None
+    } else if conditions.len() == 1 {
+        Some(conditions.into_iter().next().unwrap())
+    } else {
+        Some(
+            conditions
+                .into_iter()
+                .reduce(|acc, cond| {
+                    CoreExpr::BinaryOp(CoreBinaryOp {
+                        op: ast::expression::BinOpKind::And,
+                        left: Box::new(acc),
+                        right: Box::new(cond),
+                        position: position.clone(),
+                        info: (),
+                    })
+                })
+                .unwrap(),
+        )
+    };
+
+    (combined_condition, bindings)
+}
+
 /// Apply variable bindings to an expression
 /// Wraps the expression in nested lambda applications: (\var1 => \var2 => expr)(arg1)(arg2)
+/// Special handling for list extraction bindings marked with __LIST_HEAD__ or __LIST_TAIL__
 fn apply_bindings(
     bindings: Vec<(String, String)>,
     expr: CoreExpr<()>,
@@ -468,14 +589,54 @@ fn apply_bindings(
 
     // Apply all arguments
     let mut result = lambda_body;
-    for (_, arg_name) in bindings.iter() {
-        result = CoreExpr::FunctionCall(CoreFunctionCall {
-            func: Box::new(result),
-            arg: Box::new(CoreExpr::Ident(CoreIdent {
-                value: arg_name.clone(),
+    for (_, arg_expr_or_var) in bindings.iter() {
+        // Check if this is a special list extraction binding
+        let arg_expr = if arg_expr_or_var.starts_with("__LIST_HEAD__:") {
+            // Extract: listHead(param_name)
+            let param_name = &arg_expr_or_var["__LIST_HEAD__:".len()..];
+            CoreExpr::FunctionCall(CoreFunctionCall {
+                func: Box::new(CoreExpr::Ident(CoreIdent {
+                    value: "listHead".to_string(),
+                    position: position.clone(),
+                    info: (),
+                })),
+                arg: Box::new(CoreExpr::Ident(CoreIdent {
+                    value: param_name.to_string(),
+                    position: position.clone(),
+                    info: (),
+                })),
                 position: position.clone(),
                 info: (),
-            })),
+            })
+        } else if arg_expr_or_var.starts_with("__LIST_TAIL__:") {
+            // Extract: listTail(param_name)
+            let param_name = &arg_expr_or_var["__LIST_TAIL__:".len()..];
+            CoreExpr::FunctionCall(CoreFunctionCall {
+                func: Box::new(CoreExpr::Ident(CoreIdent {
+                    value: "listTail".to_string(),
+                    position: position.clone(),
+                    info: (),
+                })),
+                arg: Box::new(CoreExpr::Ident(CoreIdent {
+                    value: param_name.to_string(),
+                    position: position.clone(),
+                    info: (),
+                })),
+                position: position.clone(),
+                info: (),
+            })
+        } else {
+            // Normal variable binding
+            CoreExpr::Ident(CoreIdent {
+                value: arg_expr_or_var.clone(),
+                position: position.clone(),
+                info: (),
+            })
+        };
+
+        result = CoreExpr::FunctionCall(CoreFunctionCall {
+            func: Box::new(result),
+            arg: Box::new(arg_expr),
             position: position.clone(),
             info: (),
         });
