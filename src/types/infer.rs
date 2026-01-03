@@ -278,13 +278,25 @@ impl Infer {
                 Ok((final_subst, Type::Int))
             }
 
+            // Equality operators: forall a. a -> a -> Bool (polymorphic)
+            BinOpKind::Eq | BinOpKind::NotEq => {
+                let (s1, left_ty) = self.infer_expr(env, &binop.left)?;
+                let env1 = env.apply_subst(&s1);
+                let (s2, right_ty) = self.infer_expr(&env1, &binop.right)?;
+
+                // Unify left and right (they must have the same type)
+                let left_ty_subst = s2.apply(&left_ty);
+                let right_ty_subst = s2.apply(&right_ty);
+                let s3 = unify(&left_ty_subst, &right_ty_subst)
+                    .map_err(|e| TypeError::from_unify_error(e, binop.position.clone()))?;
+
+                let final_subst = s3.compose(&s2).compose(&s1);
+
+                Ok((final_subst, Type::Bool))
+            }
+
             // Comparison operators: Int -> Int -> Bool
-            BinOpKind::Eq
-            | BinOpKind::NotEq
-            | BinOpKind::Lt
-            | BinOpKind::Gt
-            | BinOpKind::LtEq
-            | BinOpKind::GtEq => {
+            BinOpKind::Lt | BinOpKind::Gt | BinOpKind::LtEq | BinOpKind::GtEq => {
                 let (s1, left_ty) = self.infer_expr(env, &binop.left)?;
                 let env1 = env.apply_subst(&s1);
                 let (s2, right_ty) = self.infer_expr(&env1, &binop.right)?;
@@ -576,6 +588,14 @@ impl Infer {
         env = env.extend(
             "listCons".to_string(),
             TypeScheme::polymorphic(vec![type_var], cons_type),
+        );
+
+        // Add __MATCH_FAILURE__: forall a. Unit -> a (polymorphic bottom)
+        let type_var = self.fresh_var();
+        let match_failure_type = Type::func(Type::Unit, Type::Var(type_var.clone()));
+        env = env.extend(
+            "__MATCH_FAILURE__".to_string(),
+            TypeScheme::polymorphic(vec![type_var], match_failure_type),
         );
 
         let mut errors = Vec::new();

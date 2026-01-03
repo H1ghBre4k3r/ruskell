@@ -31,6 +31,10 @@ where
         global_frame.insert("listHead".to_string(), RValue::Builtin(Builtin::ListHead));
         global_frame.insert("listTail".to_string(), RValue::Builtin(Builtin::ListTail));
         global_frame.insert("listCons".to_string(), RValue::Builtin(Builtin::ListCons));
+        global_frame.insert(
+            "__MATCH_FAILURE__".to_string(),
+            RValue::Builtin(Builtin::MatchFailure),
+        );
 
         for func in &functions {
             global_frame.insert(

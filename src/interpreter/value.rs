@@ -17,6 +17,7 @@ pub enum Builtin {
     ListHead,
     ListTail,
     ListCons,
+    MatchFailure,
 }
 
 /// Runtime value representation

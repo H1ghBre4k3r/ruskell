@@ -797,7 +797,19 @@ fn desugar_match_arm(
 
             // Create else branch from remaining arms
             let else_branch = if remaining_arms.is_empty() {
-                CoreExpr::Unit(CoreUnit {
+                // No more arms - create a runtime error
+                // Call a non-existent builtin to cause a panic
+                // This maintains type safety while signaling a match failure
+                CoreExpr::FunctionCall(CoreFunctionCall {
+                    func: Box::new(CoreExpr::Ident(CoreIdent {
+                        value: "__MATCH_FAILURE__".to_string(),
+                        position: arm.position.clone(),
+                        info: (),
+                    })),
+                    arg: Box::new(CoreExpr::Unit(CoreUnit {
+                        position: arm.position.clone(),
+                        info: (),
+                    })),
                     position: arm.position.clone(),
                     info: (),
                 })
@@ -831,36 +843,37 @@ fn desugar_match_arm(
             let head_var = format!("__head_{}", id);
             let tail_var = format!("__tail_{}", id);
 
-            // Build the body by recursively matching patterns
-            // Start with the original body
-            let mut current_body = body.clone();
-
-            // Match tail pattern against tail_var
-            current_body = match_pattern_against_var(
+            // Build the innermost body by matching patterns against the extracted variables
+            // Start with tail pattern matching
+            let body_with_tail = match_pattern_against_var(
                 &cons_pattern.tail,
                 &tail_var,
-                current_body,
+                body.clone(),
                 cons_pattern.tail.position().clone(),
             );
 
-            // Match head pattern against head_var
-            current_body = match_pattern_against_var(
+            // Then head pattern matching
+            let body_with_head = match_pattern_against_var(
                 &cons_pattern.head,
                 &head_var,
-                current_body,
+                body_with_tail,
                 cons_pattern.head.position().clone(),
             );
 
-            // Extract head and tail with let bindings
-            // (\tail_var => current_body)(listTail(scrutinee))
-            let with_tail = CoreExpr::FunctionCall(CoreFunctionCall {
+            // Now wrap with let bindings in the correct order:
+            // let __head = listHead(scrutinee) in
+            //   let __tail = listTail(scrutinee) in
+            //     body_with_head_and_tail
+
+            // Extract tail: (\__tail => body_with_head_and_tail)(listTail(scrutinee))
+            let with_tail_extraction = CoreExpr::FunctionCall(CoreFunctionCall {
                 func: Box::new(CoreExpr::Lambda(CoreLambda {
                     param: CoreLambdaParam::Ident(CoreIdent {
-                        value: tail_var.clone(),
+                        value: tail_var,
                         position: cons_pattern.tail.position().clone(),
                         info: (),
                     }),
-                    body: CoreLambdaBody::Expression(Box::new(current_body)),
+                    body: CoreLambdaBody::Expression(Box::new(body_with_head)),
                     position: cons_pattern.position.clone(),
                     info: (),
                 })),
@@ -878,15 +891,15 @@ fn desugar_match_arm(
                 info: (),
             });
 
-            // (\head_var => with_tail)(listHead(scrutinee))
-            let with_head = CoreExpr::FunctionCall(CoreFunctionCall {
+            // Extract head: (\__head => with_tail_extraction)(listHead(scrutinee))
+            let with_head_extraction = CoreExpr::FunctionCall(CoreFunctionCall {
                 func: Box::new(CoreExpr::Lambda(CoreLambda {
                     param: CoreLambdaParam::Ident(CoreIdent {
-                        value: head_var.clone(),
+                        value: head_var,
                         position: cons_pattern.head.position().clone(),
                         info: (),
                     }),
-                    body: CoreLambdaBody::Expression(Box::new(with_tail)),
+                    body: CoreLambdaBody::Expression(Box::new(with_tail_extraction)),
                     position: cons_pattern.position.clone(),
                     info: (),
                 })),
@@ -907,7 +920,7 @@ fn desugar_match_arm(
             // Wrap in isEmpty check
             CoreExpr::IfThenElse(CoreIfThenElse {
                 condition: Box::new(not_empty),
-                then_expr: Box::new(with_head),
+                then_expr: Box::new(with_head_extraction),
                 else_expr: Box::new(else_branch),
                 position: arm.position,
                 info: (),
@@ -950,7 +963,7 @@ fn match_pattern_against_var(
             info: (),
         }),
 
-        // Literal: check equality - if var_name == literal then body else panic
+        // Literal: check equality - if var_name == literal then body else match failure
         Pattern::Literal(lit) => {
             let var_expr = CoreExpr::Ident(CoreIdent {
                 value: var_name.to_string(),
@@ -959,8 +972,17 @@ fn match_pattern_against_var(
             });
             let condition = create_equality_check(var_expr, lit.clone(), position.clone());
 
-            // If pattern doesn't match, this is a pattern match failure (shouldn't happen in well-typed code)
-            let else_expr = CoreExpr::Unit(CoreUnit {
+            // If pattern doesn't match, this is a pattern match failure
+            let else_expr = CoreExpr::FunctionCall(CoreFunctionCall {
+                func: Box::new(CoreExpr::Ident(CoreIdent {
+                    value: "__MATCH_FAILURE__".to_string(),
+                    position: position.clone(),
+                    info: (),
+                })),
+                arg: Box::new(CoreExpr::Unit(CoreUnit {
+                    position: position.clone(),
+                    info: (),
+                })),
                 position: position.clone(),
                 info: (),
             });
@@ -1080,7 +1102,16 @@ fn match_pattern_against_var(
             CoreExpr::IfThenElse(CoreIfThenElse {
                 condition: Box::new(not_empty),
                 then_expr: Box::new(with_head),
-                else_expr: Box::new(CoreExpr::Unit(CoreUnit {
+                else_expr: Box::new(CoreExpr::FunctionCall(CoreFunctionCall {
+                    func: Box::new(CoreExpr::Ident(CoreIdent {
+                        value: "__MATCH_FAILURE__".to_string(),
+                        position: position.clone(),
+                        info: (),
+                    })),
+                    arg: Box::new(CoreExpr::Unit(CoreUnit {
+                        position: position.clone(),
+                        info: (),
+                    })),
                     position: position.clone(),
                     info: (),
                 })),

@@ -348,6 +348,12 @@ where
                                     CapturedEnv(env),
                                 )
                             }
+                            Builtin::MatchFailure => {
+                                // Pattern match failure - this should be unreachable in well-typed code
+                                panic!(
+                                    "Runtime error: pattern match failure (non-exhaustive patterns)"
+                                )
+                            }
                         }
                     }
                     other => panic!("cannot call non-function value: {:?}", other),
@@ -357,13 +363,11 @@ where
                 use crate::ast::expression::BinOpKind;
 
                 match binop.op {
-                    // Arithmetic and comparison operators need integer operands
+                    // Arithmetic operators need integer operands
                     BinOpKind::Add
                     | BinOpKind::Sub
                     | BinOpKind::Mul
                     | BinOpKind::Div
-                    | BinOpKind::Eq
-                    | BinOpKind::NotEq
                     | BinOpKind::Lt
                     | BinOpKind::Gt
                     | BinOpKind::LtEq
@@ -407,12 +411,23 @@ where
                                     info: binop.info.clone(),
                                 })
                             }
-                            BinOpKind::Eq => RValue::Bool(left_val == right_val),
-                            BinOpKind::NotEq => RValue::Bool(left_val != right_val),
                             BinOpKind::Lt => RValue::Bool(left_val < right_val),
                             BinOpKind::Gt => RValue::Bool(left_val > right_val),
                             BinOpKind::LtEq => RValue::Bool(left_val <= right_val),
                             BinOpKind::GtEq => RValue::Bool(left_val >= right_val),
+                            _ => unreachable!(),
+                        }
+                    }
+
+                    // Equality operators work on any type (polymorphic)
+                    BinOpKind::Eq | BinOpKind::NotEq => {
+                        let left = binop.left.eval(scope);
+                        let right = binop.right.eval(scope);
+
+                        let is_equal = values_equal(&left, &right);
+                        match binop.op {
+                            BinOpKind::Eq => RValue::Bool(is_equal),
+                            BinOpKind::NotEq => RValue::Bool(!is_equal),
                             _ => unreachable!(),
                         }
                     }
@@ -640,5 +655,28 @@ where
         // Leave the captured environment scope
         scope.leave();
         result
+    }
+}
+
+/// Helper function to check if two runtime values are equal
+fn values_equal<T>(a: &RValue<T>, b: &RValue<T>) -> bool {
+    match (a, b) {
+        (RValue::Unit, RValue::Unit) => true,
+        (RValue::Integer(ia), RValue::Integer(ib)) => ia.value == ib.value,
+        (RValue::String(sa), RValue::String(sb)) => sa.value == sb.value,
+        (RValue::Bool(ba), RValue::Bool(bb)) => ba == bb,
+        (RValue::List(la), RValue::List(lb)) => {
+            if la.len() != lb.len() {
+                false
+            } else {
+                la.iter().zip(lb.iter()).all(|(x, y)| values_equal(x, y))
+            }
+        }
+        // Lambdas and CoreLambdas can't be compared for equality
+        (RValue::Lambda(_), RValue::Lambda(_)) => false,
+        (RValue::CoreLambda(_, _), RValue::CoreLambda(_, _)) => false,
+        (RValue::Builtin(ba), RValue::Builtin(bb)) => ba == bb,
+        // Different types are never equal
+        _ => false,
     }
 }
