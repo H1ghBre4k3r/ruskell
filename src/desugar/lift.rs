@@ -407,6 +407,13 @@ fn free_vars_expr(expr: &CoreExpr<()>, globals: &HashSet<String>) -> HashSet<Str
             result.extend(free_vars_expr(&if_expr.else_expr, globals));
             result
         }
+        CoreExpr::List(list) => {
+            let mut result = HashSet::new();
+            for elem in &list.elements {
+                result.extend(free_vars_expr(elem, globals));
+            }
+            result
+        }
         // Literals have no free vars
         CoreExpr::Unit(_) | CoreExpr::Integer(_) | CoreExpr::String(_) | CoreExpr::Boolean(_) => {
             HashSet::new()
@@ -458,6 +465,11 @@ fn lift_expr(expr: &CoreExpr<()>, ctx: &mut LiftContext) -> CoreExpr<()> {
             then_expr: Box::new(lift_expr(&if_expr.then_expr, ctx)),
             else_expr: Box::new(lift_expr(&if_expr.else_expr, ctx)),
             position: if_expr.position.clone(),
+            info: (),
+        }),
+        CoreExpr::List(list) => CoreExpr::List(CoreList {
+            elements: list.elements.iter().map(|e| lift_expr(e, ctx)).collect(),
+            position: list.position.clone(),
             info: (),
         }),
         // Literals and identifiers remain unchanged

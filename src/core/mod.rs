@@ -197,6 +197,7 @@ pub enum CoreExpr<T> {
     Integer(CoreInteger<T>),
     String(CoreString<T>),
     Boolean(CoreBoolean<T>),
+    List(CoreList<T>),
     Lambda(CoreLambda<T>),
     FunctionCall(CoreFunctionCall<T>),
     BinaryOp(CoreBinaryOp<T>),
@@ -234,6 +235,13 @@ pub struct CoreString<T> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CoreBoolean<T> {
     pub value: bool,
+    pub position: Span,
+    pub info: T,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CoreList<T> {
+    pub elements: Vec<CoreExpr<T>>,
     pub position: Span,
     pub info: T,
 }
@@ -304,6 +312,7 @@ impl<T> CoreExpr<T> {
             CoreExpr::Integer(i) => i.position.clone(),
             CoreExpr::String(s) => s.position.clone(),
             CoreExpr::Boolean(b) => b.position.clone(),
+            CoreExpr::List(l) => l.position.clone(),
             CoreExpr::Lambda(l) => l.position.clone(),
             CoreExpr::FunctionCall(f) => f.position.clone(),
             CoreExpr::BinaryOp(b) => b.position.clone(),

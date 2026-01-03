@@ -170,6 +170,8 @@ impl Infer {
 
             CoreExpr::Boolean(_) => Ok((Substitution::empty(), Type::Bool)),
 
+            CoreExpr::List(list) => self.infer_list(env, list),
+
             CoreExpr::Ident(ident) => match env.lookup(&ident.value) {
                 Some(scheme) => {
                     let ty = self.instantiate(scheme);
@@ -276,13 +278,25 @@ impl Infer {
                 Ok((final_subst, Type::Int))
             }
 
+            // Equality operators: forall a. a -> a -> Bool (polymorphic)
+            BinOpKind::Eq | BinOpKind::NotEq => {
+                let (s1, left_ty) = self.infer_expr(env, &binop.left)?;
+                let env1 = env.apply_subst(&s1);
+                let (s2, right_ty) = self.infer_expr(&env1, &binop.right)?;
+
+                // Unify left and right (they must have the same type)
+                let left_ty_subst = s2.apply(&left_ty);
+                let right_ty_subst = s2.apply(&right_ty);
+                let s3 = unify(&left_ty_subst, &right_ty_subst)
+                    .map_err(|e| TypeError::from_unify_error(e, binop.position.clone()))?;
+
+                let final_subst = s3.compose(&s2).compose(&s1);
+
+                Ok((final_subst, Type::Bool))
+            }
+
             // Comparison operators: Int -> Int -> Bool
-            BinOpKind::Eq
-            | BinOpKind::NotEq
-            | BinOpKind::Lt
-            | BinOpKind::Gt
-            | BinOpKind::LtEq
-            | BinOpKind::GtEq => {
+            BinOpKind::Lt | BinOpKind::Gt | BinOpKind::LtEq | BinOpKind::GtEq => {
                 let (s1, left_ty) = self.infer_expr(env, &binop.left)?;
                 let env1 = env.apply_subst(&s1);
                 let (s2, right_ty) = self.infer_expr(&env1, &binop.right)?;
@@ -411,6 +425,46 @@ impl Infer {
         Ok((s9, result_ty))
     }
 
+    fn infer_list(
+        &mut self,
+        env: &TypeEnv,
+        list: &CoreList<()>,
+    ) -> Result<(Substitution, Type), TypeError> {
+        // Empty list gets a fresh type variable for the element type
+        if list.elements.is_empty() {
+            let elem_ty = Type::Var(self.fresh_var());
+            return Ok((Substitution::empty(), Type::List(Box::new(elem_ty))));
+        }
+
+        // Infer type of first element
+        let (s1, first_ty) = self.infer_expr(env, &list.elements[0])?;
+        let mut subst = s1;
+        let mut elem_ty = first_ty;
+
+        // For each remaining element, infer its type and unify with element type
+        for (i, elem_expr) in list.elements.iter().enumerate().skip(1) {
+            let env_subst = env.apply_subst(&subst);
+            let (s_elem, elem_expr_ty) = self.infer_expr(&env_subst, elem_expr)?;
+
+            // Apply current substitution to element type
+            let elem_ty_subst = s_elem.apply(&elem_ty);
+
+            // Unify with this element's type
+            let s_unify = unify(&elem_ty_subst, &elem_expr_ty).map_err(|e| {
+                TypeError::from_unify_error(e, elem_expr.position()).with_context(format!(
+                    "list element {} must have same type as other elements",
+                    i + 1
+                ))
+            })?;
+
+            // Compose substitutions
+            subst = s_unify.compose(&s_elem).compose(&subst);
+            elem_ty = subst.apply(&elem_ty);
+        }
+
+        Ok((subst, Type::List(Box::new(elem_ty))))
+    }
+
     fn infer_statement(
         &mut self,
         env: &TypeEnv,
@@ -487,6 +541,61 @@ impl Infer {
         env = env.extend(
             "toString".to_string(),
             TypeScheme::polymorphic(vec![type_var], to_string_type),
+        );
+
+        // Add listIsEmpty: forall a. List a -> Bool
+        let type_var = self.fresh_var();
+        let is_empty_type = Type::func(
+            Type::List(Box::new(Type::Var(type_var.clone()))),
+            Type::Bool,
+        );
+        env = env.extend(
+            "listIsEmpty".to_string(),
+            TypeScheme::polymorphic(vec![type_var], is_empty_type),
+        );
+
+        // Add listHead: forall a. List a -> a
+        let type_var = self.fresh_var();
+        let head_type = Type::func(
+            Type::List(Box::new(Type::Var(type_var.clone()))),
+            Type::Var(type_var.clone()),
+        );
+        env = env.extend(
+            "listHead".to_string(),
+            TypeScheme::polymorphic(vec![type_var], head_type),
+        );
+
+        // Add listTail: forall a. List a -> List a
+        let type_var = self.fresh_var();
+        let tail_type = Type::func(
+            Type::List(Box::new(Type::Var(type_var.clone()))),
+            Type::List(Box::new(Type::Var(type_var.clone()))),
+        );
+        env = env.extend(
+            "listTail".to_string(),
+            TypeScheme::polymorphic(vec![type_var], tail_type),
+        );
+
+        // Add listCons: forall a. a -> List a -> List a
+        let type_var = self.fresh_var();
+        let cons_type = Type::func(
+            Type::Var(type_var.clone()),
+            Type::func(
+                Type::List(Box::new(Type::Var(type_var.clone()))),
+                Type::List(Box::new(Type::Var(type_var.clone()))),
+            ),
+        );
+        env = env.extend(
+            "listCons".to_string(),
+            TypeScheme::polymorphic(vec![type_var], cons_type),
+        );
+
+        // Add __MATCH_FAILURE__: forall a. Unit -> a (polymorphic bottom)
+        let type_var = self.fresh_var();
+        let match_failure_type = Type::func(Type::Unit, Type::Var(type_var.clone()));
+        env = env.extend(
+            "__MATCH_FAILURE__".to_string(),
+            TypeScheme::polymorphic(vec![type_var], match_failure_type),
         );
 
         let mut errors = Vec::new();

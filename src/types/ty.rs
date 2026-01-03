@@ -145,6 +145,7 @@ impl TypeVar {
 /// * `String` - String type
 /// * `Unit` - Unit type (only value is `()`)
 /// * `Bool` - Boolean type
+/// * `List` - List type (homogeneous collection)
 /// * `Var` - Type variable (for polymorphism)
 /// * `Func` - Function type `parameter_type -> return_type`
 ///
@@ -156,6 +157,11 @@ impl TypeVar {
 /// Type::String               // String
 /// Type::Bool                 // Bool
 /// Type::Unit                 // Unit
+///
+/// // List types:
+/// Type::List(Box::new(Type::Int))     // [Int]
+/// Type::List(Box::new(Type::String))  // [String]
+/// Type::List(Box::new(Type::List(Box::new(Type::Int))))  // [[Int]]
 ///
 /// // Type variable:
 /// Type::Var(TypeVar::new(0))  // 't0 (or 'a if named)
@@ -172,6 +178,7 @@ pub enum Type {
     String,
     Unit,
     Bool,
+    List(Box<Type>),
     Var(TypeVar),
     Func(Box<Type>, Box<Type>),
 }
@@ -231,6 +238,7 @@ impl Type {
                 set.insert(v.clone());
                 set
             }
+            Type::List(elem_ty) => elem_ty.free_type_vars(),
             Type::Func(t1, t2) => {
                 let mut set = t1.free_type_vars();
                 set.extend(t2.free_type_vars());
@@ -271,6 +279,7 @@ impl Type {
             Type::String => "String".to_string(),
             Type::Unit => "Unit".to_string(),
             Type::Bool => "Bool".to_string(),
+            Type::List(elem_ty) => format!("[{}]", elem_ty.pretty()),
             Type::Var(v) => {
                 if let Some(name) = &v.name {
                     format!("'{}", name)

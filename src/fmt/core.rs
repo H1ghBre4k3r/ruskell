@@ -89,7 +89,7 @@ fn format_function<T>(func: &CoreFunction<T>, fmt: &mut Formatter) {
 }
 
 fn format_lambda<T>(lambda: &CoreLambda<T>, fmt: &mut Formatter) {
-    fmt.write_str("\\");
+    fmt.write_str("(\\");
     format_lambda_param(&lambda.param, fmt);
     fmt.write_str(" => ");
 
@@ -101,6 +101,7 @@ fn format_lambda<T>(lambda: &CoreLambda<T>, fmt: &mut Formatter) {
             format_block(stmts, fmt);
         }
     }
+    fmt.write_str(")");
 }
 
 fn format_lambda_param<T>(param: &CoreLambdaParam<T>, fmt: &mut Formatter) {
@@ -123,6 +124,16 @@ fn format_expression<T>(expr: &CoreExpr<T>, fmt: &mut Formatter, precedence: u8)
             write!(fmt.buffer, "\"{}\"", s.value).unwrap();
         }
         CoreExpr::Boolean(b) => fmt.write_str(if b.value { "true" } else { "false" }),
+        CoreExpr::List(list) => {
+            fmt.write_str("[");
+            for (i, elem) in list.elements.iter().enumerate() {
+                if i > 0 {
+                    fmt.write_str(", ");
+                }
+                format_expression(elem, fmt, 0);
+            }
+            fmt.write_str("]");
+        }
         CoreExpr::Lambda(lambda) => format_lambda(lambda, fmt),
         CoreExpr::FunctionCall(call) => format_function_call(call, fmt),
         CoreExpr::BinaryOp(binop) => format_binary_op(binop, fmt, precedence),

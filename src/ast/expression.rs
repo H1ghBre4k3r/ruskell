@@ -49,6 +49,7 @@ use super::statement::Statement;
 /// * `Integer` - Integer literal (e.g., `42`)
 /// * `String` - String literal (e.g., `"hello"`)
 /// * `Boolean` - Boolean literal (`true` or `false`)
+/// * `List` - List literal (e.g., `[1, 2, 3]`)
 /// * `FunctionCall` - Function invocation (e.g., `add(1, 2)`)
 /// * `Lambda` - Anonymous function (e.g., `\x, y => x + y`)
 /// * `BinaryOp` - Binary operation (e.g., `x + y`)
@@ -77,6 +78,7 @@ pub enum Expression<T> {
     Integer(Integer<T>),
     String(StringLiteral<T>),
     Boolean(Boolean<T>),
+    List(List<T>),
     FunctionCall(FunctionCall<T>),
     Lambda(Lambda<T>),
     BinaryOp(BinaryOp<T>),
@@ -229,6 +231,51 @@ pub struct StringLiteral<T> {
 #[derive(Debug, Clone)]
 pub struct Boolean<T> {
     pub value: bool,
+    pub position: Span,
+    pub info: T,
+}
+
+/// List literal.
+///
+/// Represents list literals in source code. Lists are homogeneous
+/// collections of elements of the same type.
+///
+/// # Fields
+///
+/// * `elements` - Vector of expressions that make up the list elements
+/// * `position` - Source location
+/// * `info` - Metadata
+///
+/// # Examples
+///
+/// ```text
+/// // Empty list: "[]"
+/// List { elements: vec![], position: ..., info: () }
+///
+/// // List of integers: "[1, 2, 3]"
+/// List {
+///     elements: vec![
+///         Integer { value: 1 },
+///         Integer { value: 2 },
+///         Integer { value: 3 },
+///     ],
+///     position: ...,
+///     info: ()
+/// }
+///
+/// // Nested list: "[[1, 2], [3, 4]]"
+/// List {
+///     elements: vec![
+///         List { elements: [1, 2] },
+///         List { elements: [3, 4] },
+///     ],
+///     position: ...,
+///     info: ()
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct List<T> {
+    pub elements: Vec<Expression<T>>,
     pub position: Span,
     pub info: T,
 }

@@ -79,6 +79,11 @@ fn erase_expr(expr: CoreExpr<()>) -> ast::expression::Expression<()> {
             position: b.position,
             info: (),
         }),
+        CoreExpr::List(l) => Expression::List(ast::expression::List {
+            elements: l.elements.into_iter().map(erase_expr).collect(),
+            position: l.position,
+            info: (),
+        }),
         CoreExpr::Lambda(lambda) => Expression::Lambda(erase_lambda(lambda)),
         CoreExpr::FunctionCall(call) => Expression::FunctionCall(ast::expression::FunctionCall {
             func: Box::new(erase_expr(*call.func)),

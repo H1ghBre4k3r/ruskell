@@ -313,8 +313,17 @@ fn build_clause_by_clause(
 
     // Build the else branch (remaining clauses)
     let else_branch = if remaining_clauses.is_empty() {
-        // No more clauses - return unit (non-exhaustive match)
-        CoreExpr::Unit(CoreUnit {
+        // No more clauses - call __MATCH_FAILURE__ to indicate pattern match failure
+        CoreExpr::FunctionCall(CoreFunctionCall {
+            func: Box::new(CoreExpr::Ident(CoreIdent {
+                value: "__MATCH_FAILURE__".to_string(),
+                position: position.clone(),
+                info: (),
+            })),
+            arg: Box::new(CoreExpr::Unit(CoreUnit {
+                position: position.clone(),
+                info: (),
+            })),
             position: position.clone(),
             info: (),
         })
@@ -350,59 +359,13 @@ fn build_clause_condition_and_bindings(
     let mut bindings = Vec::new();
 
     for (pattern, param_name) in patterns.iter().zip(param_names.iter()) {
-        match pattern {
-            ast::pattern::Pattern::Literal(lit) => {
-                // Create equality check for literal pattern
-                let scrutinee = CoreExpr::Ident(CoreIdent {
-                    value: param_name.clone(),
-                    position: position.clone(),
-                    info: (),
-                });
+        let (pattern_conds, pattern_binds) =
+            build_clause_condition_and_bindings_single(pattern, param_name, position.clone());
 
-                let literal_expr = match lit {
-                    ast::pattern::LiteralPattern::Integer(val, pos, _) => {
-                        CoreExpr::Integer(CoreInteger {
-                            value: *val,
-                            position: pos.clone(),
-                            info: (),
-                        })
-                    }
-                    ast::pattern::LiteralPattern::String(val, pos, _) => {
-                        CoreExpr::String(CoreString {
-                            value: val.clone(),
-                            position: pos.clone(),
-                            info: (),
-                        })
-                    }
-                    ast::pattern::LiteralPattern::Boolean(val, pos, _) => {
-                        CoreExpr::Boolean(CoreBoolean {
-                            value: *val,
-                            position: pos.clone(),
-                            info: (),
-                        })
-                    }
-                    ast::pattern::LiteralPattern::Unit(pos, _) => CoreExpr::Unit(CoreUnit {
-                        position: pos.clone(),
-                        info: (),
-                    }),
-                };
-
-                conditions.push(CoreExpr::BinaryOp(CoreBinaryOp {
-                    op: ast::expression::BinOpKind::Eq,
-                    left: Box::new(scrutinee),
-                    right: Box::new(literal_expr),
-                    position: position.clone(),
-                    info: (),
-                }));
-            }
-            ast::pattern::Pattern::Ident(id) => {
-                // Variable pattern: bind the parameter value to this name
-                bindings.push((id.value.clone(), param_name.clone()));
-            }
-            ast::pattern::Pattern::Wildcard(_) => {
-                // Wildcard: no condition, no binding
-            }
+        if let Some(cond) = pattern_conds {
+            conditions.push(cond);
         }
+        bindings.extend(pattern_binds);
     }
 
     // Combine all conditions with AND
@@ -430,8 +393,176 @@ fn build_clause_condition_and_bindings(
     (combined_condition, bindings)
 }
 
+/// Build condition and bindings for a single pattern
+/// Returns (optional condition, variable bindings)
+fn build_clause_condition_and_bindings_single(
+    pattern: &ast::pattern::Pattern<()>,
+    param_name: &str,
+    position: lachs::Span,
+) -> (Option<CoreExpr<()>>, Vec<(String, String)>) {
+    let mut conditions = Vec::new();
+    let mut bindings = Vec::new();
+
+    match pattern {
+        ast::pattern::Pattern::Literal(lit) => {
+            // Create equality check for literal pattern
+            let scrutinee = CoreExpr::Ident(CoreIdent {
+                value: param_name.to_string(),
+                position: position.clone(),
+                info: (),
+            });
+
+            let literal_expr = match lit {
+                ast::pattern::LiteralPattern::Integer(val, pos, _) => {
+                    CoreExpr::Integer(CoreInteger {
+                        value: *val,
+                        position: pos.clone(),
+                        info: (),
+                    })
+                }
+                ast::pattern::LiteralPattern::String(val, pos, _) => CoreExpr::String(CoreString {
+                    value: val.clone(),
+                    position: pos.clone(),
+                    info: (),
+                }),
+                ast::pattern::LiteralPattern::Boolean(val, pos, _) => {
+                    CoreExpr::Boolean(CoreBoolean {
+                        value: *val,
+                        position: pos.clone(),
+                        info: (),
+                    })
+                }
+                ast::pattern::LiteralPattern::Unit(pos, _) => CoreExpr::Unit(CoreUnit {
+                    position: pos.clone(),
+                    info: (),
+                }),
+                ast::pattern::LiteralPattern::EmptyList(pos, _) => CoreExpr::List(CoreList {
+                    elements: vec![],
+                    position: pos.clone(),
+                    info: (),
+                }),
+            };
+
+            conditions.push(CoreExpr::BinaryOp(CoreBinaryOp {
+                op: ast::expression::BinOpKind::Eq,
+                left: Box::new(scrutinee),
+                right: Box::new(literal_expr),
+                position: position.clone(),
+                info: (),
+            }));
+        }
+        ast::pattern::Pattern::Ident(id) => {
+            // Variable pattern: bind the parameter value to this name
+            bindings.push((id.value.clone(), param_name.to_string()));
+        }
+        ast::pattern::Pattern::Wildcard(_) => {
+            // Wildcard: no condition, no binding
+        }
+        ast::pattern::Pattern::ListCons(cons_pattern) => {
+            // List cons pattern: [head_pat | tail_pat]
+            // For multi-clause functions, we only support simple patterns in head/tail.
+
+            // Create the scrutinee expression
+            let scrutinee = CoreExpr::Ident(CoreIdent {
+                value: param_name.to_string(),
+                position: position.clone(),
+                info: (),
+            });
+
+            // Add condition: !listIsEmpty(param)
+            let is_empty_call = CoreExpr::FunctionCall(CoreFunctionCall {
+                func: Box::new(CoreExpr::Ident(CoreIdent {
+                    value: "listIsEmpty".to_string(),
+                    position: position.clone(),
+                    info: (),
+                })),
+                arg: Box::new(scrutinee),
+                position: position.clone(),
+                info: (),
+            });
+
+            let not_empty = CoreExpr::UnaryOp(CoreUnaryOp {
+                op: ast::expression::UnaryOpKind::Not,
+                operand: Box::new(is_empty_call),
+                position: position.clone(),
+                info: (),
+            });
+
+            conditions.push(not_empty);
+
+            // Check if head and tail are simple patterns
+            fn is_simple_pattern(pat: &ast::pattern::Pattern<()>) -> bool {
+                matches!(
+                    pat,
+                    ast::pattern::Pattern::Ident(_) | ast::pattern::Pattern::Wildcard(_)
+                )
+            }
+
+            if !is_simple_pattern(&cons_pattern.head) || !is_simple_pattern(&cons_pattern.tail) {
+                panic!(
+                    "Multi-clause functions only support simple patterns (identifiers/wildcards) in list cons head/tail.\n\
+                         For complex patterns like [1 | xs] or [[x | xs] | rest], use a case expression instead:\n\
+                         \n\
+                         Example:\n\
+                         foo xs = case xs of\n\
+                             [1 | rest] => ...\n\
+                             _ => ...\n\
+                         end"
+                );
+            }
+
+            // Process head pattern - bind directly to listHead extraction
+            match &*cons_pattern.head {
+                ast::pattern::Pattern::Ident(id) => {
+                    bindings.push((id.value.clone(), format!("__LIST_HEAD__:{}", param_name)));
+                }
+                ast::pattern::Pattern::Wildcard(_) => {
+                    // No binding needed
+                }
+                _ => unreachable!("Already checked for simple patterns"),
+            }
+
+            // Process tail pattern - bind directly to listTail extraction
+            match &*cons_pattern.tail {
+                ast::pattern::Pattern::Ident(id) => {
+                    bindings.push((id.value.clone(), format!("__LIST_TAIL__:{}", param_name)));
+                }
+                ast::pattern::Pattern::Wildcard(_) => {
+                    // No binding needed
+                }
+                _ => unreachable!("Already checked for simple patterns"),
+            }
+        }
+    }
+
+    // Combine all conditions with AND (for the single pattern)
+    let combined_condition = if conditions.is_empty() {
+        None
+    } else if conditions.len() == 1 {
+        Some(conditions.into_iter().next().unwrap())
+    } else {
+        Some(
+            conditions
+                .into_iter()
+                .reduce(|acc, cond| {
+                    CoreExpr::BinaryOp(CoreBinaryOp {
+                        op: ast::expression::BinOpKind::And,
+                        left: Box::new(acc),
+                        right: Box::new(cond),
+                        position: position.clone(),
+                        info: (),
+                    })
+                })
+                .unwrap(),
+        )
+    };
+
+    (combined_condition, bindings)
+}
+
 /// Apply variable bindings to an expression
 /// Wraps the expression in nested lambda applications: (\var1 => \var2 => expr)(arg1)(arg2)
+/// Special handling for list extraction bindings marked with __LIST_HEAD__ or __LIST_TAIL__
 fn apply_bindings(
     bindings: Vec<(String, String)>,
     expr: CoreExpr<()>,
@@ -458,14 +589,52 @@ fn apply_bindings(
 
     // Apply all arguments
     let mut result = lambda_body;
-    for (_, arg_name) in bindings.iter() {
-        result = CoreExpr::FunctionCall(CoreFunctionCall {
-            func: Box::new(result),
-            arg: Box::new(CoreExpr::Ident(CoreIdent {
-                value: arg_name.clone(),
+    for (_, arg_expr_or_var) in bindings.iter() {
+        // Check if this is a special list extraction binding
+        let arg_expr = if let Some(param_name) = arg_expr_or_var.strip_prefix("__LIST_HEAD__:") {
+            // Extract: listHead(param_name)
+            CoreExpr::FunctionCall(CoreFunctionCall {
+                func: Box::new(CoreExpr::Ident(CoreIdent {
+                    value: "listHead".to_string(),
+                    position: position.clone(),
+                    info: (),
+                })),
+                arg: Box::new(CoreExpr::Ident(CoreIdent {
+                    value: param_name.to_string(),
+                    position: position.clone(),
+                    info: (),
+                })),
                 position: position.clone(),
                 info: (),
-            })),
+            })
+        } else if let Some(param_name) = arg_expr_or_var.strip_prefix("__LIST_TAIL__:") {
+            // Extract: listTail(param_name)
+            CoreExpr::FunctionCall(CoreFunctionCall {
+                func: Box::new(CoreExpr::Ident(CoreIdent {
+                    value: "listTail".to_string(),
+                    position: position.clone(),
+                    info: (),
+                })),
+                arg: Box::new(CoreExpr::Ident(CoreIdent {
+                    value: param_name.to_string(),
+                    position: position.clone(),
+                    info: (),
+                })),
+                position: position.clone(),
+                info: (),
+            })
+        } else {
+            // Normal variable binding
+            CoreExpr::Ident(CoreIdent {
+                value: arg_expr_or_var.clone(),
+                position: position.clone(),
+                info: (),
+            })
+        };
+
+        result = CoreExpr::FunctionCall(CoreFunctionCall {
+            func: Box::new(result),
+            arg: Box::new(arg_expr),
             position: position.clone(),
             info: (),
         });
@@ -668,6 +837,11 @@ fn desugar_expr(expr: ast::expression::Expression<()>) -> CoreExpr<()> {
             position: b.position,
             info: (),
         }),
+        Expression::List(l) => CoreExpr::List(CoreList {
+            elements: l.elements.into_iter().map(desugar_expr).collect(),
+            position: l.position,
+            info: (),
+        }),
         Expression::Lambda(lambda) => CoreExpr::Lambda(desugar_lambda(lambda)),
         Expression::FunctionCall(call) => desugar_function_call(call),
         Expression::BinaryOp(binop) => CoreExpr::BinaryOp(CoreBinaryOp {
@@ -771,6 +945,339 @@ fn desugar_match_arm(
                 info: (),
             })
         }
+
+        // List cons pattern - desugar to isEmpty check + head/tail extraction
+        Pattern::ListCons(cons_pattern) => {
+            // Desugar [head_pat | tail_pat] to:
+            // if !listIsEmpty(scrutinee) then
+            //     (\ head_name => (\ tail_name => [nested pattern match])(listTail(scrutinee)))(listHead(scrutinee))
+            // else
+            //     [continue with remaining arms]
+
+            // Create else branch from remaining arms
+            let else_branch = if remaining_arms.is_empty() {
+                // No more arms - create a runtime error
+                // Call a non-existent builtin to cause a panic
+                // This maintains type safety while signaling a match failure
+                CoreExpr::FunctionCall(CoreFunctionCall {
+                    func: Box::new(CoreExpr::Ident(CoreIdent {
+                        value: "__MATCH_FAILURE__".to_string(),
+                        position: arm.position.clone(),
+                        info: (),
+                    })),
+                    arg: Box::new(CoreExpr::Unit(CoreUnit {
+                        position: arm.position.clone(),
+                        info: (),
+                    })),
+                    position: arm.position.clone(),
+                    info: (),
+                })
+            } else {
+                desugar_arms(scrutinee, remaining_arms)
+            };
+
+            // Create !listIsEmpty(scrutinee) condition
+            let is_empty_call = CoreExpr::FunctionCall(CoreFunctionCall {
+                func: Box::new(CoreExpr::Ident(CoreIdent {
+                    value: "listIsEmpty".to_string(),
+                    position: cons_pattern.position.clone(),
+                    info: (),
+                })),
+                arg: Box::new(scrutinee.clone()),
+                position: cons_pattern.position.clone(),
+                info: (),
+            });
+
+            let not_empty = CoreExpr::UnaryOp(CoreUnaryOp {
+                op: ast::expression::UnaryOpKind::Not,
+                operand: Box::new(is_empty_call),
+                position: cons_pattern.position.clone(),
+                info: (),
+            });
+
+            // Generate unique names for head and tail temps
+            static PATTERN_COUNTER: std::sync::atomic::AtomicUsize =
+                std::sync::atomic::AtomicUsize::new(0);
+            let id = PATTERN_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let head_var = format!("__head_{}", id);
+            let tail_var = format!("__tail_{}", id);
+
+            // Build the innermost body by matching patterns against the extracted variables
+            // Start with tail pattern matching
+            let body_with_tail = match_pattern_against_var(
+                &cons_pattern.tail,
+                &tail_var,
+                body.clone(),
+                cons_pattern.tail.position().clone(),
+            );
+
+            // Then head pattern matching
+            let body_with_head = match_pattern_against_var(
+                &cons_pattern.head,
+                &head_var,
+                body_with_tail,
+                cons_pattern.head.position().clone(),
+            );
+
+            // Now wrap with let bindings in the correct order:
+            // let __head = listHead(scrutinee) in
+            //   let __tail = listTail(scrutinee) in
+            //     body_with_head_and_tail
+
+            // Extract tail: (\__tail => body_with_head_and_tail)(listTail(scrutinee))
+            let with_tail_extraction = CoreExpr::FunctionCall(CoreFunctionCall {
+                func: Box::new(CoreExpr::Lambda(CoreLambda {
+                    param: CoreLambdaParam::Ident(CoreIdent {
+                        value: tail_var,
+                        position: cons_pattern.tail.position().clone(),
+                        info: (),
+                    }),
+                    body: CoreLambdaBody::Expression(Box::new(body_with_head)),
+                    position: cons_pattern.position.clone(),
+                    info: (),
+                })),
+                arg: Box::new(CoreExpr::FunctionCall(CoreFunctionCall {
+                    func: Box::new(CoreExpr::Ident(CoreIdent {
+                        value: "listTail".to_string(),
+                        position: cons_pattern.position.clone(),
+                        info: (),
+                    })),
+                    arg: Box::new(scrutinee.clone()),
+                    position: cons_pattern.position.clone(),
+                    info: (),
+                })),
+                position: cons_pattern.position.clone(),
+                info: (),
+            });
+
+            // Extract head: (\__head => with_tail_extraction)(listHead(scrutinee))
+            let with_head_extraction = CoreExpr::FunctionCall(CoreFunctionCall {
+                func: Box::new(CoreExpr::Lambda(CoreLambda {
+                    param: CoreLambdaParam::Ident(CoreIdent {
+                        value: head_var,
+                        position: cons_pattern.head.position().clone(),
+                        info: (),
+                    }),
+                    body: CoreLambdaBody::Expression(Box::new(with_tail_extraction)),
+                    position: cons_pattern.position.clone(),
+                    info: (),
+                })),
+                arg: Box::new(CoreExpr::FunctionCall(CoreFunctionCall {
+                    func: Box::new(CoreExpr::Ident(CoreIdent {
+                        value: "listHead".to_string(),
+                        position: cons_pattern.position.clone(),
+                        info: (),
+                    })),
+                    arg: Box::new(scrutinee.clone()),
+                    position: cons_pattern.position.clone(),
+                    info: (),
+                })),
+                position: cons_pattern.position.clone(),
+                info: (),
+            });
+
+            // Wrap in isEmpty check
+            CoreExpr::IfThenElse(CoreIfThenElse {
+                condition: Box::new(not_empty),
+                then_expr: Box::new(with_head_extraction),
+                else_expr: Box::new(else_branch),
+                position: arm.position,
+                info: (),
+            })
+        }
+    }
+}
+
+/// Match a pattern against a variable, wrapping the body appropriately
+fn match_pattern_against_var(
+    pattern: &ast::pattern::Pattern<()>,
+    var_name: &str,
+    body: CoreExpr<()>,
+    position: lachs::Span,
+) -> CoreExpr<()> {
+    use ast::pattern::Pattern;
+
+    match pattern {
+        // Wildcard: no binding, just return body
+        Pattern::Wildcard(_) => body,
+
+        // Ident: bind the variable - (\pattern_var => body)(var_name)
+        Pattern::Ident(ident) => CoreExpr::FunctionCall(CoreFunctionCall {
+            func: Box::new(CoreExpr::Lambda(CoreLambda {
+                param: CoreLambdaParam::Ident(CoreIdent {
+                    value: ident.value.clone(),
+                    position: ident.position.clone(),
+                    info: (),
+                }),
+                body: CoreLambdaBody::Expression(Box::new(body)),
+                position: position.clone(),
+                info: (),
+            })),
+            arg: Box::new(CoreExpr::Ident(CoreIdent {
+                value: var_name.to_string(),
+                position: position.clone(),
+                info: (),
+            })),
+            position,
+            info: (),
+        }),
+
+        // Literal: check equality - if var_name == literal then body else match failure
+        Pattern::Literal(lit) => {
+            let var_expr = CoreExpr::Ident(CoreIdent {
+                value: var_name.to_string(),
+                position: position.clone(),
+                info: (),
+            });
+            let condition = create_equality_check(var_expr, lit.clone(), position.clone());
+
+            // If pattern doesn't match, this is a pattern match failure
+            let else_expr = CoreExpr::FunctionCall(CoreFunctionCall {
+                func: Box::new(CoreExpr::Ident(CoreIdent {
+                    value: "__MATCH_FAILURE__".to_string(),
+                    position: position.clone(),
+                    info: (),
+                })),
+                arg: Box::new(CoreExpr::Unit(CoreUnit {
+                    position: position.clone(),
+                    info: (),
+                })),
+                position: position.clone(),
+                info: (),
+            });
+
+            CoreExpr::IfThenElse(CoreIfThenElse {
+                condition: Box::new(condition),
+                then_expr: Box::new(body),
+                else_expr: Box::new(else_expr),
+                position,
+                info: (),
+            })
+        }
+
+        // Nested ListCons: recursively desugar
+        Pattern::ListCons(cons) => {
+            // Generate fresh names for nested head/tail
+            static NESTED_COUNTER: std::sync::atomic::AtomicUsize =
+                std::sync::atomic::AtomicUsize::new(1000);
+            let id = NESTED_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let nested_head_var = format!("__nested_head_{}", id);
+            let nested_tail_var = format!("__nested_tail_{}", id);
+
+            // Match tail pattern
+            let mut result = match_pattern_against_var(
+                &cons.tail,
+                &nested_tail_var,
+                body,
+                cons.tail.position().clone(),
+            );
+
+            // Match head pattern
+            result = match_pattern_against_var(
+                &cons.head,
+                &nested_head_var,
+                result,
+                cons.head.position().clone(),
+            );
+
+            // Wrap with isEmpty check and let bindings
+            let var_expr = CoreExpr::Ident(CoreIdent {
+                value: var_name.to_string(),
+                position: position.clone(),
+                info: (),
+            });
+
+            let is_empty = CoreExpr::FunctionCall(CoreFunctionCall {
+                func: Box::new(CoreExpr::Ident(CoreIdent {
+                    value: "listIsEmpty".to_string(),
+                    position: position.clone(),
+                    info: (),
+                })),
+                arg: Box::new(var_expr.clone()),
+                position: position.clone(),
+                info: (),
+            });
+
+            let not_empty = CoreExpr::UnaryOp(CoreUnaryOp {
+                op: ast::expression::UnaryOpKind::Not,
+                operand: Box::new(is_empty),
+                position: position.clone(),
+                info: (),
+            });
+
+            // Extract tail
+            let with_tail = CoreExpr::FunctionCall(CoreFunctionCall {
+                func: Box::new(CoreExpr::Lambda(CoreLambda {
+                    param: CoreLambdaParam::Ident(CoreIdent {
+                        value: nested_tail_var,
+                        position: cons.tail.position().clone(),
+                        info: (),
+                    }),
+                    body: CoreLambdaBody::Expression(Box::new(result)),
+                    position: position.clone(),
+                    info: (),
+                })),
+                arg: Box::new(CoreExpr::FunctionCall(CoreFunctionCall {
+                    func: Box::new(CoreExpr::Ident(CoreIdent {
+                        value: "listTail".to_string(),
+                        position: position.clone(),
+                        info: (),
+                    })),
+                    arg: Box::new(var_expr.clone()),
+                    position: position.clone(),
+                    info: (),
+                })),
+                position: position.clone(),
+                info: (),
+            });
+
+            // Extract head
+            let with_head = CoreExpr::FunctionCall(CoreFunctionCall {
+                func: Box::new(CoreExpr::Lambda(CoreLambda {
+                    param: CoreLambdaParam::Ident(CoreIdent {
+                        value: nested_head_var,
+                        position: cons.head.position().clone(),
+                        info: (),
+                    }),
+                    body: CoreLambdaBody::Expression(Box::new(with_tail)),
+                    position: position.clone(),
+                    info: (),
+                })),
+                arg: Box::new(CoreExpr::FunctionCall(CoreFunctionCall {
+                    func: Box::new(CoreExpr::Ident(CoreIdent {
+                        value: "listHead".to_string(),
+                        position: position.clone(),
+                        info: (),
+                    })),
+                    arg: Box::new(var_expr),
+                    position: position.clone(),
+                    info: (),
+                })),
+                position: position.clone(),
+                info: (),
+            });
+
+            // Wrap with isEmpty check
+            CoreExpr::IfThenElse(CoreIfThenElse {
+                condition: Box::new(not_empty),
+                then_expr: Box::new(with_head),
+                else_expr: Box::new(CoreExpr::FunctionCall(CoreFunctionCall {
+                    func: Box::new(CoreExpr::Ident(CoreIdent {
+                        value: "__MATCH_FAILURE__".to_string(),
+                        position: position.clone(),
+                        info: (),
+                    })),
+                    arg: Box::new(CoreExpr::Unit(CoreUnit {
+                        position: position.clone(),
+                        info: (),
+                    })),
+                    position: position.clone(),
+                    info: (),
+                })),
+                position,
+                info: (),
+            })
+        }
     }
 }
 
@@ -800,6 +1307,11 @@ fn create_equality_check(
             info: (),
         }),
         LiteralPattern::Unit(pos, _) => CoreExpr::Unit(CoreUnit {
+            position: pos,
+            info: (),
+        }),
+        LiteralPattern::EmptyList(pos, _) => CoreExpr::List(CoreList {
+            elements: vec![],
             position: pos,
             info: (),
         }),

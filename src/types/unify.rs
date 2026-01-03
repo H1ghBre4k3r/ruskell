@@ -75,6 +75,7 @@ fn occurs_in(var: &TypeVar, ty: &Type) -> bool {
     match ty {
         Type::Int | Type::String | Type::Unit | Type::Bool => false,
         Type::Var(v) => v == var,
+        Type::List(elem_ty) => occurs_in(var, elem_ty),
         Type::Func(t1, t2) => occurs_in(var, t1) || occurs_in(var, t2),
     }
 }
@@ -174,6 +175,9 @@ pub fn unify(t1: &Type, t2: &Type) -> Result<Substitution, UnifyError> {
         (Type::String, Type::String) => Ok(Substitution::empty()),
         (Type::Unit, Type::Unit) => Ok(Substitution::empty()),
         (Type::Bool, Type::Bool) => Ok(Substitution::empty()),
+
+        // List types - element types must unify
+        (Type::List(elem1), Type::List(elem2)) => unify(elem1, elem2),
 
         // Type variable unification
         (Type::Var(v1), Type::Var(v2)) if v1 == v2 => Ok(Substitution::empty()),

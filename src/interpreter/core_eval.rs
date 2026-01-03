@@ -92,6 +92,7 @@
 //! - [`crate::interpreter::scope`] - Scope management for variables
 //! - [`crate::interpreter::value`] - Runtime value representations
 
+use std::collections::HashMap;
 use std::fmt::Debug;
 
 use crate::core::*;
@@ -154,9 +155,35 @@ where
     pub fn eval(&self, scope: &mut Scope<T>) -> RValue<T> {
         match self {
             CoreExpr::Unit(_) => RValue::Unit,
-            CoreExpr::Ident(ident) => scope
-                .resolve(&ident.value)
-                .unwrap_or_else(|| panic!("undefined identifier: {}", ident.value)),
+            CoreExpr::Ident(ident) => {
+                // Special handling for cons implementation
+                if ident.value == "__CONS_IMPL__" {
+                    // This is the body of the cons lambda's second argument
+                    // At this point, scope should have:
+                    // - __cons_elem (from captured env)
+                    // - __cons_list_arg (the parameter)
+                    let elem = scope
+                        .resolve("__cons_elem")
+                        .expect("cons: missing captured element");
+                    let list_val = scope
+                        .resolve("__cons_list_arg")
+                        .expect("cons: missing list argument");
+
+                    match list_val {
+                        RValue::List(mut elements) => {
+                            // Prepend the element
+                            let mut new_list = vec![elem];
+                            new_list.append(&mut elements);
+                            RValue::List(new_list)
+                        }
+                        _ => panic!("cons: second argument must be a list, got: {:?}", list_val),
+                    }
+                } else {
+                    scope
+                        .resolve(&ident.value)
+                        .unwrap_or_else(|| panic!("undefined identifier: {}", ident.value))
+                }
+            }
             CoreExpr::Integer(integer) => RValue::Integer(crate::ast::expression::Integer {
                 value: integer.value,
                 position: integer.position.clone(),
@@ -168,6 +195,10 @@ where
                 info: string.info.clone(),
             }),
             CoreExpr::Boolean(boolean) => RValue::Bool(boolean.value),
+            CoreExpr::List(list) => {
+                let elements = list.elements.iter().map(|e| e.eval(scope)).collect();
+                RValue::List(elements)
+            }
             CoreExpr::Lambda(lambda) => {
                 // Capture the current environment for the closure
                 let captured = scope.capture();
@@ -190,6 +221,25 @@ where
                                     RValue::Integer(i) => println!("{}", i.value),
                                     RValue::String(s) => println!("{}", s.value), // Print without quotes
                                     RValue::Bool(b) => println!("{}", b),
+                                    RValue::List(elements) => {
+                                        print!("[");
+                                        for (i, elem) in elements.iter().enumerate() {
+                                            if i > 0 {
+                                                print!(", ");
+                                            }
+                                            match elem {
+                                                RValue::Unit => print!("()"),
+                                                RValue::Integer(int) => print!("{}", int.value),
+                                                RValue::String(s) => print!("\"{}\"", s.value),
+                                                RValue::Bool(b) => print!("{}", b),
+                                                RValue::List(_) => print!("<list>"),
+                                                RValue::CoreLambda(_, _) => print!("<function>"),
+                                                RValue::Lambda(_) => print!("<function>"),
+                                                RValue::Builtin(_) => print!("<builtin>"),
+                                            }
+                                        }
+                                        println!("]");
+                                    }
                                     RValue::CoreLambda(_, _) => println!("<function>"),
                                     RValue::Lambda(_) => println!("<function>"),
                                     RValue::Builtin(_) => println!("<builtin>"),
@@ -203,6 +253,29 @@ where
                                     RValue::Integer(i) => i.value.to_string(),
                                     RValue::String(s) => s.value.clone(),
                                     RValue::Bool(b) => b.to_string(),
+                                    RValue::List(elements) => {
+                                        let mut result = "[".to_string();
+                                        for (i, elem) in elements.iter().enumerate() {
+                                            if i > 0 {
+                                                result.push_str(", ");
+                                            }
+                                            let elem_str = match elem {
+                                                RValue::Unit => "()".to_string(),
+                                                RValue::Integer(int) => int.value.to_string(),
+                                                RValue::String(s) => format!("\"{}\"", s.value),
+                                                RValue::Bool(b) => b.to_string(),
+                                                RValue::List(_) => "<list>".to_string(),
+                                                RValue::CoreLambda(_, _) => {
+                                                    "<function>".to_string()
+                                                }
+                                                RValue::Lambda(_) => "<function>".to_string(),
+                                                RValue::Builtin(_) => "<builtin>".to_string(),
+                                            };
+                                            result.push_str(&elem_str);
+                                        }
+                                        result.push(']');
+                                        result
+                                    }
                                     RValue::CoreLambda(_, _) => "<function>".to_string(),
                                     RValue::Lambda(_) => "<function>".to_string(),
                                     RValue::Builtin(_) => "<builtin>".to_string(),
@@ -213,6 +286,74 @@ where
                                     info: call.info.clone(),
                                 })
                             }
+                            Builtin::ListIsEmpty => match arg_value {
+                                RValue::List(elements) => RValue::Bool(elements.is_empty()),
+                                _ => panic!("__list_isEmpty expects list, got: {:?}", arg_value),
+                            },
+                            Builtin::ListHead => match arg_value {
+                                RValue::List(elements) => {
+                                    if elements.is_empty() {
+                                        panic!("Runtime error: head of empty list")
+                                    } else {
+                                        elements[0].clone()
+                                    }
+                                }
+                                _ => panic!("__list_head expects list, got: {:?}", arg_value),
+                            },
+                            Builtin::ListTail => match arg_value {
+                                RValue::List(elements) => {
+                                    if elements.is_empty() {
+                                        panic!("Runtime error: tail of empty list")
+                                    } else {
+                                        RValue::List(elements[1..].to_vec())
+                                    }
+                                }
+                                _ => panic!("__list_tail expects list, got: {:?}", arg_value),
+                            },
+                            Builtin::ListCons => {
+                                // cons is curried: cons(element)(list)
+                                // Return a lambda that captures the element and prepends it
+                                use crate::core::{
+                                    CoreExpr, CoreIdent, CoreLambda, CoreLambdaBody,
+                                    CoreLambdaParam,
+                                };
+                                use crate::interpreter::value::CapturedEnv;
+
+                                // Capture the element in the closure environment
+                                let mut env = HashMap::new();
+                                env.insert("__cons_elem".to_string(), arg_value);
+
+                                // Create a lambda that takes the list and prepends the element
+                                // Body: construct new list with element at front
+                                RValue::CoreLambda(
+                                    CoreLambda {
+                                        param: CoreLambdaParam::Ident(CoreIdent {
+                                            value: "__cons_list_arg".to_string(),
+                                            position: call.position.clone(),
+                                            info: call.info.clone(),
+                                        }),
+                                        // The body will be evaluated later when the lambda is called
+                                        // For now, we create a special marker that will be handled
+                                        // in the lambda evaluation
+                                        body: CoreLambdaBody::Expression(Box::new(
+                                            CoreExpr::Ident(CoreIdent {
+                                                value: "__CONS_IMPL__".to_string(),
+                                                position: call.position.clone(),
+                                                info: call.info.clone(),
+                                            }),
+                                        )),
+                                        position: call.position.clone(),
+                                        info: call.info.clone(),
+                                    },
+                                    CapturedEnv(env),
+                                )
+                            }
+                            Builtin::MatchFailure => {
+                                // Pattern match failure - this should be unreachable in well-typed code
+                                panic!(
+                                    "Runtime error: pattern match failure (non-exhaustive patterns)"
+                                )
+                            }
                         }
                     }
                     other => panic!("cannot call non-function value: {:?}", other),
@@ -222,13 +363,11 @@ where
                 use crate::ast::expression::BinOpKind;
 
                 match binop.op {
-                    // Arithmetic and comparison operators need integer operands
+                    // Arithmetic operators need integer operands
                     BinOpKind::Add
                     | BinOpKind::Sub
                     | BinOpKind::Mul
                     | BinOpKind::Div
-                    | BinOpKind::Eq
-                    | BinOpKind::NotEq
                     | BinOpKind::Lt
                     | BinOpKind::Gt
                     | BinOpKind::LtEq
@@ -272,12 +411,23 @@ where
                                     info: binop.info.clone(),
                                 })
                             }
-                            BinOpKind::Eq => RValue::Bool(left_val == right_val),
-                            BinOpKind::NotEq => RValue::Bool(left_val != right_val),
                             BinOpKind::Lt => RValue::Bool(left_val < right_val),
                             BinOpKind::Gt => RValue::Bool(left_val > right_val),
                             BinOpKind::LtEq => RValue::Bool(left_val <= right_val),
                             BinOpKind::GtEq => RValue::Bool(left_val >= right_val),
+                            _ => unreachable!(),
+                        }
+                    }
+
+                    // Equality operators work on any type (polymorphic)
+                    BinOpKind::Eq | BinOpKind::NotEq => {
+                        let left = binop.left.eval(scope);
+                        let right = binop.right.eval(scope);
+
+                        let is_equal = values_equal(&left, &right);
+                        match binop.op {
+                            BinOpKind::Eq => RValue::Bool(is_equal),
+                            BinOpKind::NotEq => RValue::Bool(!is_equal),
                             _ => unreachable!(),
                         }
                     }
@@ -505,5 +655,28 @@ where
         // Leave the captured environment scope
         scope.leave();
         result
+    }
+}
+
+/// Helper function to check if two runtime values are equal
+fn values_equal<T>(a: &RValue<T>, b: &RValue<T>) -> bool {
+    match (a, b) {
+        (RValue::Unit, RValue::Unit) => true,
+        (RValue::Integer(ia), RValue::Integer(ib)) => ia.value == ib.value,
+        (RValue::String(sa), RValue::String(sb)) => sa.value == sb.value,
+        (RValue::Bool(ba), RValue::Bool(bb)) => ba == bb,
+        (RValue::List(la), RValue::List(lb)) => {
+            if la.len() != lb.len() {
+                false
+            } else {
+                la.iter().zip(lb.iter()).all(|(x, y)| values_equal(x, y))
+            }
+        }
+        // Lambdas and CoreLambdas can't be compared for equality
+        (RValue::Lambda(_), RValue::Lambda(_)) => false,
+        (RValue::CoreLambda(_, _), RValue::CoreLambda(_, _)) => false,
+        (RValue::Builtin(ba), RValue::Builtin(bb)) => ba == bb,
+        // Different types are never equal
+        _ => false,
     }
 }

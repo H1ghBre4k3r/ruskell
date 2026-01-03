@@ -1,0 +1,82 @@
+
+length [] = 0
+length [_ | rest] = 1 + length(rest)
+
+sum [] = 0
+sum [x | xs] = x + sum(xs)
+
+head [h | _] = h
+
+tail [_ | t] = t
+
+isEmpty [] = true
+isEmpty [_ | _] = false
+
+map f [] = []
+map f [x | xs] = listCons(f(x), map(f, xs))
+
+filter p [] = []
+filter p [x | xs] = do
+    if p(x) then
+        listCons(x, filter(p, xs))
+    else
+        filter(p, xs)
+    end
+end
+
+take n [] = []
+take n [x | xs] = do
+    if n <= 0 then
+        []
+    else
+        listCons(x, take(n - 1, xs))
+    end
+end
+
+drop n [] = []
+drop n [x | xs] = do
+    if n <= 0 then
+        listCons(x, xs)
+    else
+        drop(n - 1, xs)
+    end
+end
+
+double x = x * 2
+isPositive x = x > 0
+
+main = do
+    print("=== List Cons Pattern Matching Demo ===")
+    print("")
+    
+    print("Basic list operations:")
+    nums := [1, 2, 3, 4, 5]
+    print(toString(length(nums)))
+    print(toString(sum(nums)))
+    print(toString(head(nums)))
+    print(toString(length(tail(nums))))
+    print("")
+    
+    print("Map (doubling):")
+    doubled := map(double, nums)
+    print(toString(head(doubled)))
+    print(toString(sum(doubled)))
+    print("")
+    
+    print("Filter (positives):")
+    mixed := [1, 2, 3, 4, 5]
+    positives := filter(isPositive, mixed)
+    print(toString(length(positives)))
+    print("")
+    
+    print("Take/Drop:")
+    firstThree := take(3, [1, 2, 3, 4, 5])
+    print(toString(firstThree))
+    
+    afterTwo := drop(2, [1, 2, 3, 4, 5])
+    print(toString(afterTwo))
+    print("")
+    
+    print("=== All list operations working! ===")
+    0
+end

@@ -29,12 +29,13 @@ Ruskell is a small, experimental functional programming language that takes insp
 | **Local Bindings** | Variable assignment with `:=` operator |
 | **Lambda Expressions** | Multi-parameter lambdas with automatic currying |
 | **Lexical Closures** | Proper environment capture for nested functions |
+| **Pattern Matching** | Multi-clause functions and case expressions with destructuring |
+| **List Cons Patterns** | Pattern matching on lists with `[head \| tail]` syntax |
 | **Arithmetic Operators** | `+`, `-`, `*`, `/` with proper precedence |
 | **Type Inference** | Full Hindley-Milner type system with let-polymorphism |
 | **Type Safety** | Compile-time type checking catches errors early |
-| **Pattern Matching** | Match expressions with pattern destructuring |
 | **Lambda Lifting** | Automatic closure conversion for optimization |
-| **Basic Types** | Integers, strings, and unit values |
+| **Basic Types** | Integers, strings, lists, and unit values |
 | **Tree-walking Interpreter** | Direct AST evaluation for simplicity |
 
 ## Language Syntax
@@ -57,6 +58,41 @@ Local variables can be bound using the `:=` operator:
 myFunc = do
     x := 42
     x
+end
+```
+
+### List Pattern Matching
+
+Ruskell supports functional list manipulation with cons patterns:
+
+```haskell
+-- Multi-clause pattern matching on lists
+length [] = 0
+length [h | t] = 1 + length(t)
+
+sum [] = 0
+sum [x | xs] = x + sum(xs)
+
+-- Higher-order list functions
+map f [] = []
+map f [x | xs] = listCons(f(x), map(f, xs))
+
+filter p [] = []
+filter p [x | xs] = do
+    if p(x) then
+        listCons(x, filter(p, xs))
+    else
+        filter(p, xs)
+    end
+end
+
+-- Using list operations
+main = do
+    nums := [1, 2, 3, 4, 5]
+    total := sum(nums)
+    doubled := map(\x => x * 2, nums)
+    print(toString(total))  -- 15
+    0
 end
 ```
 

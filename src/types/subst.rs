@@ -214,6 +214,7 @@ impl Substitution {
         match ty {
             Type::Int | Type::String | Type::Unit | Type::Bool => ty.clone(),
             Type::Var(v) => self.0.get(v).cloned().unwrap_or_else(|| ty.clone()),
+            Type::List(elem_ty) => Type::List(Box::new(self.apply(elem_ty))),
             Type::Func(t1, t2) => Type::func(self.apply(t1), self.apply(t2)),
         }
     }
