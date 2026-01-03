@@ -9,7 +9,7 @@ use crate::lexer::Token;
 use crate::parser::combinators::{
     BoxedParser, expect_arrow, expect_backslash, expect_comma, expect_do, expect_else, expect_end,
     expect_if, expect_lbracket, expect_logical_and, expect_logical_not, expect_logical_or,
-    expect_lparen, expect_pipe, expect_rbracket, expect_rparen, expect_then, many, optional,
+    expect_lparen, expect_rbracket, expect_rparen, expect_then, many, optional,
 };
 use crate::parser::state::{ParseState, Parser};
 

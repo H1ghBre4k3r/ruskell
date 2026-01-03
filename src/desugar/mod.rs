@@ -591,9 +591,8 @@ fn apply_bindings(
     let mut result = lambda_body;
     for (_, arg_expr_or_var) in bindings.iter() {
         // Check if this is a special list extraction binding
-        let arg_expr = if arg_expr_or_var.starts_with("__LIST_HEAD__:") {
+        let arg_expr = if let Some(param_name) = arg_expr_or_var.strip_prefix("__LIST_HEAD__:") {
             // Extract: listHead(param_name)
-            let param_name = &arg_expr_or_var["__LIST_HEAD__:".len()..];
             CoreExpr::FunctionCall(CoreFunctionCall {
                 func: Box::new(CoreExpr::Ident(CoreIdent {
                     value: "listHead".to_string(),
@@ -608,9 +607,8 @@ fn apply_bindings(
                 position: position.clone(),
                 info: (),
             })
-        } else if arg_expr_or_var.starts_with("__LIST_TAIL__:") {
+        } else if let Some(param_name) = arg_expr_or_var.strip_prefix("__LIST_TAIL__:") {
             // Extract: listTail(param_name)
-            let param_name = &arg_expr_or_var["__LIST_TAIL__:".len()..];
             CoreExpr::FunctionCall(CoreFunctionCall {
                 func: Box::new(CoreExpr::Ident(CoreIdent {
                     value: "listTail".to_string(),
