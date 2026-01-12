@@ -40,6 +40,17 @@
 //! - Colon: `:`
 //! - Pipe: `|`
 //!
+//! ## Comments
+//!
+//! Ruskell supports two types of comments:
+//! - Single-line comments: `-- comment text`
+//! - Multi-line comments: `{- comment text -}`
+//!
+//! Multi-line comments can be nested: `{- outer {- inner -} outer -}`
+//!
+//! Comments are stripped during preprocessing before lexing via the
+//! [`strip_comments`] function.
+//!
 //! ## Usage
 //!
 //! The lexer is typically used indirectly through the parser:
@@ -143,6 +154,84 @@ pub enum Token {
     RBracket,
     #[terminal("|")]
     Pipe,
+}
+
+/// Strip comments from source code before lexing
+///
+/// Removes both single-line (`--`) and multi-line (`{- -}`) comments,
+/// preserving line numbers for accurate error reporting.
+///
+/// # Comment Syntax
+///
+/// - **Single-line comments**: Start with `--` and continue to end of line
+/// - **Multi-line comments**: Enclosed in `{-` and `-}`, can be nested
+///
+/// # Examples
+///
+/// ```
+/// use ruskell::lexer::strip_comments;
+///
+/// let source = "main = 42 -- this is a comment";
+/// let stripped = strip_comments(source);
+/// assert_eq!(stripped, "main = 42                     ");
+///
+/// let source = "x = {- nested {- comment -} here -} 1";
+/// let stripped = strip_comments(source);
+/// assert_eq!(stripped, "x =                                 1");
+/// ```
+pub fn strip_comments(source: &str) -> String {
+    let mut result = String::with_capacity(source.len());
+    let chars: Vec<char> = source.chars().collect();
+    let mut i = 0;
+    let mut nesting_level = 0;
+
+    while i < chars.len() {
+        // Check for multi-line comment start
+        if i + 1 < chars.len() && chars[i] == '{' && chars[i + 1] == '-' {
+            nesting_level += 1;
+            result.push(' ');
+            result.push(' ');
+            i += 2;
+            continue;
+        }
+
+        // Check for multi-line comment end
+        if i + 1 < chars.len() && chars[i] == '-' && chars[i + 1] == '}' && nesting_level > 0 {
+            nesting_level -= 1;
+            result.push(' ');
+            result.push(' ');
+            i += 2;
+            continue;
+        }
+
+        // Inside multi-line comment
+        if nesting_level > 0 {
+            if chars[i] == '\n' {
+                result.push('\n');
+            } else {
+                result.push(' ');
+            }
+            i += 1;
+            continue;
+        }
+
+        // Check for single-line comment
+        if i + 1 < chars.len() && chars[i] == '-' && chars[i + 1] == '-' {
+            // Replace comment with spaces until end of line
+            while i < chars.len() && chars[i] != '\n' {
+                result.push(' ');
+                i += 1;
+            }
+            // Don't skip the newline; it will be added in the next iteration
+            continue;
+        }
+
+        // Regular character
+        result.push(chars[i]);
+        i += 1;
+    }
+
+    result
 }
 
 impl Token {

@@ -97,6 +97,9 @@ fn cmd_run(file: &str, verbose: bool) -> i32 {
         }
     };
 
+    // Strip comments
+    let source = ruskell::lexer::strip_comments(&source);
+
     // Lex
     let tokens = match Token::lex(&source) {
         Ok(t) => t,
@@ -178,6 +181,9 @@ fn cmd_check(file: &str, verbose: bool) -> i32 {
         }
     };
 
+    // Strip comments
+    let source = ruskell::lexer::strip_comments(&source);
+
     // Lex
     let tokens = match Token::lex(&source) {
         Ok(t) => t,
@@ -251,6 +257,9 @@ fn cmd_fmt(file: &str, in_place: bool, desugar: bool) -> i32 {
             return 2;
         }
     };
+
+    // Strip comments
+    let source = ruskell::lexer::strip_comments(&source);
 
     // Lex
     let tokens = match Token::lex(&source) {
